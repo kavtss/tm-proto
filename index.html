@@ -18,7 +18,9 @@
   canvas{width:100%;height:auto;display:block;border-radius:12px;background:#000}
   video{display:none}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
-  button{font:inherit;font-weight:800;border:3px solid var(--navy);border-radius:14px;padding:10px 14px;background:var(--cream);color:var(--navy);cursor:pointer;box-shadow:0 4px 0 #000}
+  button{font:inherit;font-weight:800;border:3px solid var(--navy);border-radius:14px;padding:10px 14px;background:var(--cream);color:var(--navy);cursor:pointer;box-shadow:0 4px 0 #000;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;transition:transform .05s}
+  button:active,button.pressed{transform:translateY(4px);box-shadow:0 0 0 #000;filter:brightness(.92)}
+  select,input,label{touch-action:manipulation}
   button.primary{background:var(--mag);color:#fff}
   button:disabled{opacity:.5;cursor:default}
   label{font-size:13px;display:flex;align-items:center;gap:6px}
@@ -171,6 +173,7 @@ const RW = 128, RH = 128; roiCanvas.width = RW; roiCanvas.height = RH;
 let landmarker = null, running = false, lastTs = -1;
 let skin = null;            // {cr, cb, sd} skin chroma stats
 let tongueModel = null;     // {cr, cb, sd} from calibration
+let lastR, statsAt = 0;
 let tip = null, tipRaw = null, tongueArea = 0, fps = 0, lastFrame = performance.now();
 
 // ---------- colour helpers ----------
@@ -457,7 +460,7 @@ function stepRail(now){
     const sp0 = Math.hypot(RAIL.vel[0], RAIL.vel[1]);
     if(!tip || sp0 > 0.35){ RAIL.holdSince = 0; }
     else if(!RAIL.holdSince) RAIL.holdSince = now;
-    RAIL.waiting = !(RAIL.holdSince && now - RAIL.holdSince > 600);
+    RAIL.waiting = !(RAIL.holdSince && now - RAIL.holdSince > 350);
     if(RAIL.waiting){ RAIL.last = now;
       if(tip){ const p=normTip(tip); if(RAIL.prev && dt>0){ const a=1-Math.exp(-dt/0.12); RAIL.vel=[RAIL.vel[0]+((p[0]-RAIL.prev[0])/dt-RAIL.vel[0])*a, RAIL.vel[1]+((p[1]-RAIL.prev[1])/dt-RAIL.vel[1])*a]; } RAIL.prev=p; }
       cursor = trackAt(0); return; }
@@ -623,10 +626,18 @@ function detectTongueNN(lm, W, H){
   const vis=(va[0]+va[1])/2;
   if(!NN.hm || NN.hm.length!==cur.length || !NN.wasVisible) NN.hm=cur; else for(let i=0;i<cur.length;i++) NN.hm[i]=NN.hm[i]*0.45+cur[i]*0.55;
   const pr=NN.hm;
-  const sa=(off)=>{ let sx=0, sy=0, mx=0; for(let i=0;i<576;i++){ const w=pr[off+i]; sx+=w*((i%24)+0.5); sy+=w*(((i/24)|0)+0.5); if(w>mx) mx=w; } return [sx,sy,mx]; };
+  const sa=(off)=>{ let mi=0, mx=0; for(let i=0;i<576;i++){ if(pr[off+i]>mx){ mx=pr[off+i]; mi=i; } }
+    const px=mi%24, py=(mi/24)|0; let sx=0, sy=0, sw=0, mass=0;
+    for(let y=Math.max(0,py-2);y<=Math.min(23,py+2);y++) for(let x=Math.max(0,px-2);x<=Math.min(23,px+2);x++){ const w=pr[off+y*24+x]; sx+=w*(x+0.5); sy+=w*(y+0.5); sw+=w; }
+    return [sx/sw, sy/sw, mx, sw]; };
   let [sx,sy,mx]=sa(0);
   NN.edges = null;
-  if(pr.length>=576*3){ const a=sa(576), b=sa(1152); NN.edges=[[a[0]*160/24,a[1]*160/24],[b[0]*160/24,b[1]*160/24]]; }
+  if(pr.length>=576*3){ const a=sa(576), b=sa(1152);
+    if(Math.min(a[3],b[3]) > 0.12){
+      let A=[a[0]*160/24,a[1]*160/24], B=[b[0]*160/24,b[1]*160/24]; if(A[0]>B[0]) [A,B]=[B,A];   // keep left/right identity stable
+      const now=performance.now(); if(!NN.ef) NN.ef=[oneEuro(1.2,0.4),oneEuro(1.2,0.4),oneEuro(1.2,0.4),oneEuro(1.2,0.4)];
+      NN.edges=[[NN.ef[0](A[0],now),NN.ef[1](A[1],now)],[NN.ef[2](B[0],now),NN.ef[3](B[1],now)]];
+    } else NN.ef=null; }
   // hysteresis: harder to lose the tongue than to find it (half-out tongue gives lower confidence)
   const thr = NN.wasVisible ? 0.18 : 0.45;
   NN.conf = vis; NN.wasVisible = vis > thr; lastMode = NN.wasVisible ? "nn" : "none";
@@ -686,14 +697,16 @@ function loop(){
   const now=performance.now(); fps = fps*0.9 + (1000/Math.max(1,now-lastFrame))*0.1; lastFrame=now;
   const W=view.width, H=view.height;
   vctx.drawImage(video,0,0,W,H);
+  let fresh=false;
   if(video.currentTime !== lastTs){
-    lastTs = video.currentTime;
+    lastTs = video.currentTime; fresh=true;
     const res = landmarker.detectForVideo(video, now);
     lastLm = res.faceLandmarks && res.faceLandmarks[0] ? res.faceLandmarks[0] : null;
   }
   if(lastLm){
     vctx.fillStyle="#7CF"; for(const i of [...LIP_OUTER,...LIP_INNER]) vctx.fillRect(lastLm[i].x*W-1.5, lastLm[i].y*H-1.5, 3, 3);
-    const r = (NN.ready && $("useNN").checked) ? detectTongueNN(lastLm, W, H) : detectTongue(lastLm, W, H);
+    const r = fresh || lastR===undefined ? ((NN.ready && $("useNN").checked) ? detectTongueNN(lastLm, W, H) : detectTongue(lastLm, W, H)) : lastR;
+    lastR = r;
     if(r){
       tipRaw = r.face; lostFor = 0;
       const sm = +$("smooth").value;                         // 0..0.9 → filter strength
@@ -712,11 +725,11 @@ function loop(){
   } else lose(now);
   if(rangeSamples && now > rangeUntil) finishRange();
   guideTick(now); if($("playMode").value==="rail") stepRail(now); else stepGame(); if(window.FX) FX.tick(now, !!tip); drawGame(); drawRailHints(); if(window.FX) FX.draw(gctx, now); recordFrame(now);
-  $("stats").textContent =
+  if(now-statsAt>250){ statsAt=now; $("stats").textContent =
     `FPS ${fps.toFixed(0)}  лицо: ${lastLm?"да":"нет"}  язык: ${tip?"да":"нет"}\n`+
     `площадь языка (отн. рта): ${tongueArea.toFixed(2)}\n`+
     `кончик (в ширинах рта): ${tip? tip.map(v=>v.toFixed(2)).join(", ") : "—"}\n`+
-    `режим: ${lastMode==='nn'?'нейросеть':lastMode==='out'?'язык снаружи':lastMode==='in'?'язык во рту':'—'} · уверенность NN ${NN.conf.toFixed(2)}\nширина языка: ${SHAPE.w==null?'—':SHAPE.w.toFixed(2)} (${SHAPE.label})`;
+    `режим: ${lastMode==='nn'?'нейросеть':lastMode==='out'?'язык снаружи':lastMode==='in'?'язык во рту':'—'} · уверенность NN ${NN.conf.toFixed(2)}\nширина языка: ${SHAPE.w==null?'—':SHAPE.w.toFixed(2)} (${SHAPE.label})`; }
   requestAnimationFrame(loop);
 }
 
@@ -981,6 +994,7 @@ const FX = (() => {
   function unlock(){ const c=ac(); if(c && c.state==='suspended') c.resume();
     ['countdown_go','tongue_found','hit_tochno','miss_bwop','combo_3','stk_tochno','stk_miss','finish_jingle','star_1','star_2','star_3'].forEach(load); }
   ['click','touchend','keydown'].forEach(ev=>document.addEventListener(ev,unlock,{passive:true}));
+  document.addEventListener('touchstart',()=>{},{passive:true});   // lets iOS Safari show :active instantly
   function play(k,{rate=1,gain=1,when=0}={}){ if(!sfxOn()) return; const c=ac(); if(!c) return;
     load(k).then(b=>{ if(!b) return; const s=c.createBufferSource(); s.buffer=b; s.playbackRate.value=rate; const g=c.createGain(); g.gain.value=gain; s.connect(g).connect(master); s.start(c.currentTime+when); }); }
   function vib(p){ if(!vibOn()) return; try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
