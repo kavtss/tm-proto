@@ -179,6 +179,9 @@ let skin = null;            // {cr, cb, sd} skin chroma stats
 let tongueModel = null;     // {cr, cb, sd} from calibration
 let lastR, statsAt = 0, hasVFC = false, vfNew = true, tapHold = 0;
 document.addEventListener('pointerdown', ()=>{ tapHold = performance.now()+150; }, {capture:true, passive:true});
+// touch: fire the button right on finger-up instead of waiting for Safari's late click
+document.addEventListener('pointerup', e=>{ if(e.pointerType!=='touch') return; const b=e.target.closest && e.target.closest('button'); if(!b || b.disabled) return; b.__fast=performance.now(); b.click(); }, {capture:true});
+document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('button'); if(b && e.isTrusted && b.__fast && performance.now()-b.__fast<800){ e.stopImmediatePropagation(); e.preventDefault(); b.__fast=0; } }, {capture:true});
 let tip = null, tipRaw = null, tongueArea = 0, fps = 0, lastFrame = performance.now();
 
 // ---------- colour helpers ----------
@@ -345,7 +348,7 @@ $("trackSel").onchange = () => { track = makeTrack($("trackSel").value); buildCp
 let anchor=null;
 function resetRun(){ RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
 // "Старт": run arms; it begins when the cursor reaches the start dot
-$("playBtn").onclick = () => { resetRun(); armed=true; $("score").textContent="Старт с текущего положения языка"; };
+$("playBtn").onclick = () => { if(armed) return; resetRun(); armed=true; armedAt=performance.now(); RAIL.count=1.5; $("score").textContent="Приготовься… язык в удобное положение"; };
 
 // ---------- personal range calibration: tongue circle → maps your reach onto the field ----------
 let range = { cx:0, cy:0, rx:0.9, ry:0.9 };   // defaults: the mouth opening fills the field
@@ -388,6 +391,8 @@ function nearestOnTrack(p, from, to){
 
 function toGame(p){ const S=game.width/2; return [S + p[0]*S, S + p[1]*S]; }
 
+function railRev(){ return $("playMode").value==="rail" && RAIL.open && (RAIL.lap||0)%2===1 && playing; }
+function cpAt(k){ return railRev()? track.length-1-cps[k] : cps[k]; }
 function drawGame(){
   if(GUIDE.on){ drawGuide(); return; }
   const W=game.width; gctx.fillStyle="#FBF1E1"; gctx.fillRect(0,0,W,W);
@@ -397,8 +402,8 @@ function drawGame(){
   gctx.beginPath(); track.forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke();
   // passed path
   const pi = Math.floor(progress);
-  if(pi>0){ gctx.strokeStyle="#C2306F"; gctx.lineWidth=14; gctx.shadowColor="#C2306F"; gctx.shadowBlur=12;
-    gctx.beginPath(); track.slice(0,pi+1).forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); gctx.shadowBlur=0; }
+  if(pi>0 || railRev()){ gctx.strokeStyle="#C2306F"; gctx.lineWidth=14; gctx.shadowColor="#C2306F"; gctx.shadowBlur=12;
+    gctx.beginPath(); (railRev()? track.slice(pi) : track.slice(0,pi+1)).forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); gctx.shadowBlur=0; }
   // start / finish
   const s=toGame(track[0]), f=toGame(track[track.length-1]);
   gctx.fillStyle="#2E9E6B"; gctx.beginPath(); gctx.arc(...s,10,0,7); gctx.fill();
@@ -408,12 +413,12 @@ function drawGame(){
   for(let k=0;k<4;k++){ gctx.fillStyle = k%2? "#1C2B4D":"#FBF1E1"; gctx.beginPath(); gctx.moveTo(...f); gctx.arc(...f,10,k*Math.PI/2,(k+1)*Math.PI/2); gctx.fill(); }
   gctx.fillStyle="#1C2B4D"; gctx.font="bold 13px system-ui"; gctx.textAlign="center"; gctx.fillText("ФИНИШ", f[0], f[1]+33);
   // target (gold ring a little ahead of progress)
-  for(let k=1;k<cps.length;k++){ const q=toGame(track[cps[k]]); const done=k<=cpIdx;
+  for(let k=1;k<cps.length;k++){ const q=toGame(track[cpAt(k)]); const done=k<=cpIdx;
     gctx.fillStyle = done ? "#C2306F" : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=3;
     gctx.beginPath(); gctx.arc(...q, done?9:7, 0, 7); gctx.fill(); gctx.stroke(); }
-  if(cpFlash>0){ const q=toGame(track[cps[cpIdx]]); gctx.strokeStyle="rgba(242,182,50,"+(cpFlash/12)+")"; gctx.lineWidth=6;
+  if(cpFlash>0){ const q=toGame(track[cpAt(cpIdx)]); gctx.strokeStyle="rgba(242,182,50,"+(cpFlash/12)+")"; gctx.lineWidth=6;
     gctx.beginPath(); gctx.arc(...q, 18+(12-cpFlash)*2, 0, 7); gctx.stroke(); cpFlash--; }
-  const tgtP = (playing && !finished) ? track[cps[Math.min(CP_N,cpIdx+1)]] : null;
+  const tgtP = (playing && !finished) ? track[cpAt(Math.min(CP_N,cpIdx+1))] : null;
   if(tgtP){ const t=toGame(tgtP);
     gctx.strokeStyle="#F2B632"; gctx.lineWidth=5; gctx.beginPath(); gctx.arc(...t,18,0,7); gctx.stroke(); }
   // raw tongue position (ghost) + magnetised cursor
@@ -461,60 +466,74 @@ function stepRail(now){
   // Rails v3: the tongue's MOVEMENT drives the cursor. Push the tongue the way the line goes and the cursor
   // travels along the line at the same speed; stop and it stops. No need to reach absolute positions.
   const dt = RAIL.last ? Math.min(0.1,(now-RAIL.last)/1000) : 0; RAIL.last = now;
+  // ---- Technique mode: a round is several laps of the same shape. The cursor glides with the tongue's own
+  // speed; moving the right way keeps full pace, the wrong way slows it down (never a hard stop). Score =
+  // how well the DIRECTION of movement follows the line + whether the curls were made in the right zones.
+  const rank = TRACK_RANK[$("trackSel").value] ?? 0;
+  const LAPS = [5,5,6,6,7,8][rank], cosMin = [0.15,0.35,0.45,0.55,0.6,0.65][rank];
   if(armed && !playing){
-    const sp0 = Math.hypot(RAIL.vel[0], RAIL.vel[1]);
-    if(!tip || sp0 > 0.35){ RAIL.holdSince = 0; }
-    else if(!RAIL.holdSince) RAIL.holdSince = now;
-    RAIL.waiting = !(RAIL.holdSince && now - RAIL.holdSince > 350);
-    if(RAIL.waiting){ RAIL.last = now;
-      if(tip){ const p=normTip(tip); if(RAIL.prev && dt>0){ const a=1-Math.exp(-dt/0.12); RAIL.vel=[RAIL.vel[0]+((p[0]-RAIL.prev[0])/dt-RAIL.vel[0])*a, RAIL.vel[1]+((p[1]-RAIL.prev[1])/dt-RAIL.vel[1])*a]; } RAIL.prev=p; }
-      cursor = trackAt(0); return; }
+    const left = 1.5 - (now-armedAt)/1000;                           // fixed countdown, no "hold still" wait
+    RAIL.count = Math.max(0,left); cursor = trackAt(0);
+    if(left>0){ RAIL.waiting=true; return; }
+    if(window.FX) FX.start(rank); RAIL.waiting=false; playing=true; armed=false;
+    const L1_=track.length-1; RAIL.open = Math.hypot(track[0][0]-track[L1_][0], track[0][1]-track[L1_][1]) > 0.2;
+    Object.assign(RAIL,{s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
+    cpIdx=0;
   }
-  if(armed && !playing){ if(window.FX) FX.start(TRACK_RANK[$("trackSel").value] ?? 0); RAIL.waiting=false; playing=true; armed=false; RAIL.s=0; RAIL.match=0; RAIL.frames=0; RAIL.moveT=0; RAIL.okT=0; cpIdx=0; RAIL.prev=null; RAIL.vel=[0,0]; }
-  const t = tangentAt(RAIL.s); RAIL.dir = t;
-  if(tip){
+  const rev = () => RAIL.open && (RAIL.lap||0)%2===1;
+  const posOf = u => rev() ? (track.length-1-u) : u;
+  const tanOf = u => { const q=tangentAt(posOf(u)); return rev() ? [-q[0],-q[1]] : q; };
+  const t = playing ? tanOf(RAIL.u||0) : tangentAt(RAIL.s); RAIL.dir = t;
+  // velocity only from REAL new tongue samples (camera ~30 fps), so it does not flicker 0 / 2x between frames
+  if(tip && lastTipAt !== RAIL.prevT){
     if($("autoRange").checked) autoRange(tip, now);
     const p = normTip(tip);
-    if(RAIL.prev && dt>0){
-      const vx=(p[0]-RAIL.prev[0])/dt, vy=(p[1]-RAIL.prev[1])/dt, a=1-Math.exp(-dt/0.12);
-      RAIL.vel=[RAIL.vel[0]+(vx-RAIL.vel[0])*a, RAIL.vel[1]+(vy-RAIL.vel[1])*a];
-    }
-    RAIL.prev = p;
-  } else { RAIL.vel=[RAIL.vel[0]*0.8, RAIL.vel[1]*0.8]; RAIL.prev=null; }
-  const speed = Math.hypot(RAIL.vel[0],RAIL.vel[1]);
-  const along = RAIL.vel[0]*t[0]+RAIL.vel[1]*t[1];
-  const cos = speed>1e-6 ? along/speed : 0;
-  const rank = TRACK_RANK[$("trackSel").value] ?? 0;
-  const cosMin = [0.15, 0.35, 0.45, 0.55, 0.6, 0.65][rank];      // how exactly the direction must match
-  RAIL.moving = !!tip && speed > 0.3;
-  RAIL.ok = RAIL.moving && cos > cosMin;
+    if(RAIL.prev && RAIL.prevT){ const dts=Math.min(0.12,(lastTipAt-RAIL.prevT)/1000);
+      if(dts>0){ const a=1-Math.exp(-dts/0.09); RAIL.vel=[RAIL.vel[0]+((p[0]-RAIL.prev[0])/dts-RAIL.vel[0])*a, RAIL.vel[1]+((p[1]-RAIL.prev[1])/dts-RAIL.vel[1])*a]; } }
+    RAIL.prev=p; RAIL.prevT=lastTipAt;
+  } else if(!tip){ RAIL.vel=[RAIL.vel[0]*0.9, RAIL.vel[1]*0.9]; RAIL.prev=null; }
+  const speed = Math.min(3, Math.hypot(RAIL.vel[0],RAIL.vel[1]));   // cap: a jump of the dot is not a sprint
+  const cos = speed>1e-6 ? (RAIL.vel[0]*t[0]+RAIL.vel[1]*t[1])/speed : 0;
+  const qf = Math.max(0, Math.min(1, (cos-(cosMin-0.3))/(1-(cosMin-0.3))));   // 0..1 direction quality
+  RAIL.moving = !!tip && speed > 0.25;
+  RAIL.ok = RAIL.moving && qf > 0.5;
   if(playing && !finished){
-    if(RAIL.moving){ RAIL.moveT += dt; if(RAIL.ok) RAIL.okT += dt; RAIL.segMove=(RAIL.segMove||0)+dt; if(RAIL.ok) RAIL.segOk=(RAIL.segOk||0)+dt; }
-    if(RAIL.ok){
-      const G = +$("gain").value * 0.75;                           // "Размах": how far the cursor goes per tongue movement
-      let adv = along * G * dt;                                    // distance along the line, in field units
-      const cum = trackCum();
-      while(adv > 0 && RAIL.s < track.length-1){
-        const i=Math.floor(RAIL.s), seg=(cum[i+1]-cum[i])||1e-6, left=(1-(RAIL.s-i))*seg;
-        if(adv < left){ RAIL.s += adv/seg; adv=0; } else { RAIL.s = i+1; adv -= left; }
-      }
-    }
-    const L1=track.length-1;
-    if(RAIL.s > L1*0.9 && RAIL.ok) RAIL.s = Math.min(L1, RAIL.s + L1*0.3*dt);
-    if(RAIL.s > L1-0.6) RAIL.s = L1;
-    while(cpIdx < CP_N && RAIL.s >= cps[cpIdx+1]-0.3){ cpIdx++; cpFlash=12;
-      const q=(RAIL.segOk||0)/Math.max(0.001,RAIL.segMove||0); RAIL.segOk=0; RAIL.segMove=0; if(window.FX) FX.checkpoint(q, cpIdx, toGame(trackAt(RAIL.s))); }
-    if(cpIdx>=CP_N) finishAt = now;
+    if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt; RAIL.qSum+=qf*w; RAIL.qW+=w; RAIL.segQ+=qf*w; RAIL.segW+=w;
+      const h=Math.atan2(RAIL.vel[1],RAIL.vel[0]); if(RAIL.lastHead!==null){ let d=h-RAIL.lastHead; d=Math.atan2(Math.sin(d),Math.cos(d)); RAIL.segTurnT+=d; } RAIL.lastHead=h; }
+    else RAIL.lastHead=null;
+    // smooth cursor speed (field units / s)
+    const G = +$("gain").value * 0.75;
+    const gate = Math.min(1, Math.max(0, (speed-0.12)/0.25));                    // small jitter does not move the cursor
+    const target = RAIL.moving ? speed*gate*G*(0.35+0.65*qf) : 0;
+    RAIL.cs += (target-RAIL.cs)*(1-Math.exp(-dt/0.18));
+    let adv = RAIL.cs*dt; const cum=trackCum(); const L1=track.length-1;
+    const h0=Math.atan2(t[1],t[0]);
+    while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
+      if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
+      RAIL.s=posOf(RAIL.u);
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS); if(RAIL.lap>=LAPS){ adv=0; break; } } }
+    // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
+    if(tip && RAIL.prev && !RAIL.wrapped){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
+      for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
+      if(bu>=0 && bd<0.3){ const k=(1-Math.exp(-dt/0.5))*(1-bd/0.3); RAIL.u=Math.max(0,Math.min(L1-0.01,RAIL.u+(bu-RAIL.u)*k)); RAIL.s=posOf(RAIL.u); } }
+    if(RAIL.wrapped){ RAIL.wrapped=false; RAIL.segTurnL=0; RAIL.segTurnT=0; RAIL.segQ=0; RAIL.segW=0; RAIL.lastHead=null; }
+    else { const t2=tanOf(RAIL.u); let dl=Math.atan2(t2[1],t2[0])-h0; dl=Math.atan2(Math.sin(dl),Math.cos(dl)); RAIL.segTurnL+=dl; }
+    while(cpIdx < CP_N && RAIL.lap<LAPS && RAIL.u >= cps[cpIdx+1]-0.3){ cpIdx++; cpFlash=12;
+      const q = RAIL.segW>0 ? RAIL.segQ/RAIL.segW : 0;
+      const curl = Math.abs(RAIL.segTurnL)>1.1 && Math.sign(RAIL.segTurnT)===Math.sign(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)>0.5*Math.abs(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)<2.2*Math.abs(RAIL.segTurnL) && q>0.5;
+      if(curl) RAIL.curls++;
+      RAIL.segQ=0; RAIL.segW=0; RAIL.segTurnT=0; RAIL.segTurnL=0;
+      if(window.FX) FX.checkpoint(q, cpIdx, toGame(trackAt(RAIL.s)), curl); }
     progress = RAIL.s;
-    const acc = Math.round(100*RAIL.okT/Math.max(0.001,RAIL.moveT));
-    $("score").textContent = `точки ${cpIdx}/${CP_N} · направление ${acc}%`;
-    if(cpIdx>=CP_N){ finished=true; playing=false;
-      const st = rank===0 ? [50,25] : [75,50]; const stars = acc>=st[0]?3:acc>=st[1]?2:1; if(window.FX) FX.finish(stars);
-      $("score").textContent = `ФИНИШ · ${"★".repeat(stars)}${"☆".repeat(3-stars)} · направление ${acc}%`; }
+    const tech = Math.round(100*RAIL.qSum/Math.max(1e-6,RAIL.qW));
+    $("score").textContent = `круг ${Math.min(LAPS,RAIL.lap+1)}/${LAPS} · техника ${tech}% · завитки ${RAIL.curls}`;
+    if(RAIL.lap>=LAPS){ finished=true; playing=false; finishAt=now;
+      const st = rank===0 ? [55,35] : [75,55]; const stars = tech>=st[0]?3:tech>=st[1]?2:1; if(window.FX) FX.finish(stars);
+      $("score").textContent = `ФИНИШ · ${"★".repeat(stars)}${"☆".repeat(3-stars)} · техника ${tech}% · завитки ${RAIL.curls}`; }
   }
   cursor = trackAt(RAIL.s); rawGame = null; offLine = false;
 }
-let finishAt=0;
+let finishAt=0, armedAt=0, lastTipAt=0;
 function drawFinish(){
   if(!finished) return;
   const W=game.width, t=Math.min(1,(performance.now()-finishAt)/400);
@@ -526,6 +545,8 @@ function drawFinish(){
 }
 function drawRailHints(){
   drawFinish(); if(finished) return;
+  if(armed && RAIL.count>0){ const W=game.width; gctx.fillStyle='rgba(28,43,77,.55)'; gctx.fillRect(0,0,W,W); gctx.fillStyle='#F2B632'; gctx.textAlign='center'; gctx.textBaseline='middle'; gctx.font='900 120px system-ui'; gctx.fillText(String(Math.ceil(RAIL.count)), W/2, W/2); gctx.textBaseline='alphabetic'; return; }
+  if(playing && RAIL.lap!==undefined){ const W=game.width; gctx.fillStyle='#1C2B4D'; gctx.font='900 22px system-ui'; gctx.textAlign='left'; gctx.fillText(`Круг ${Math.min(RAIL.lap+1,[5,5,6,6,7,8][TRACK_RANK[$("trackSel").value]??0])}`, 14, 30); }
   if($("playMode").value!=="rail" || !cursor) return;
   const c=toGame(cursor), d=RAIL.dir, L=46;
   // big arrow: which way to move the tongue now
@@ -716,7 +737,7 @@ function loop(){
     const r = fresh || lastR===undefined ? ((NN.ready && $("useNN").checked) ? detectTongueNN(lastLm, W, H) : detectTongue(lastLm, W, H)) : lastR;
     lastR = r;
     if(r){
-      tipRaw = r.face; lostFor = 0;
+      tipRaw = r.face; lostFor = 0; if(fresh) lastTipAt = now;
       const sm = +$("smooth").value;                         // 0..0.9 → filter strength
       const mc = 3.0*(1-sm)+0.3;
       if(Math.abs(mc-lastMc)>0.05){ fX=oneEuro(mc,0.6); fY=oneEuro(mc,0.6); lastMc=mc; }
@@ -759,7 +780,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 250 && rec.shots.length < 60){
     rec.lastShot = now;
@@ -1015,7 +1036,7 @@ const FX = (() => {
   let wake=null; async function wakeOn(){ try{ wake = await navigator.wakeLock?.request('screen'); }catch(e){} }
   const STK={tochno:['ТОЧНО В ТОЧКУ!','#F2B632','#1C2B4D','stk_tochno'],sniper:['ЯЗЫК-СНАЙПЕР','#C2306F','#FFFFFF','stk_sniper'],combo5:['КОМБО ×5','#F2B632','#1C2B4D','stk_combo5'],
     clean:['ЧИСТАЯ ЛИНИЯ','#FFFFFF','#1C2B4D','stk_cleanline'],miss:['МИМО КАССЫ','#8FD3FF','#1C2B4D','stk_miss'],where:['ГДЕ ЯЗЫК?','#8FD3FF','#1C2B4D','stk_where'],
-    rest:['ПЕРЕДОХНИ','#C9D2E3','#1C2B4D','stk_rest'],combo3:['КОМБО ×3','#F2B632','#1C2B4D',null],combo10:['КОМБО ×10','#C2306F','#FFFFFF',null]};
+    rest:['ПЕРЕДОХНИ','#C9D2E3','#1C2B4D','stk_rest'],curl:['ЗАВИТОК!','#2BB3A3','#FFFFFF','stk_cleanline'],lap:['КРУГ','#FFFFFF','#1C2B4D',null],combo3:['КОМБО ×3','#F2B632','#1C2B4D',null],combo10:['КОМБО ×10','#C2306F','#FFFFFF',null]};
   function showSticker(id,pos,{sound=true,bad=false}={}){ const now=performance.now();
     if(now-lastStk<2000) return false; if(bad && now-lastBadStk<5000) return false;
     const d=STK[id]; lastStk=now; if(bad) lastBadStk=now;
@@ -1023,7 +1044,9 @@ const FX = (() => {
     if(sound && d[3]) play(d[3],{gain:.9,when:.05}); if(musicSrc && bad) duck(0.15,600); return true; }
   return {
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
-    checkpoint(q,idx,pos){
+    lap(k,n){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
+    checkpoint(q,idx,pos,curl){
+      if(curl){ lastStk=0; showSticker('curl',pos); }
       if(q>=0.5){ misses=0; combo++; play('hit_tochno',{rate:Math.pow(2,Math.min(combo-1,12)/12)}); vib(q>0.85?V.perfect:V.hit);
         if(q>0.85) play('slurp',{gain:.45,when:.02});
         if(combo===3){ play('combo_3',{when:.12}); vib(V.combo3); showSticker('combo3',pos,{sound:false}); }
