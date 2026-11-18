@@ -391,7 +391,7 @@ function drawTipShape(){ const c=$("tcShape"), x=c.getContext("2d"); x.clearRect
 function hideTipCard(){ $("tipCard").classList.add("hide"); }
 $("tcGo").onclick = () => { if(!running){ $("startBtn").scrollIntoView({block:"center"}); return; } $("playBtn").click(); };
 let anchor=null;
-function resetRun(){ RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
+function resetRun(){ JUDG.seg=[]; JUDG.lap=-1; JUDG.pops=[]; RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
 // "Старт": run arms; it begins when the cursor reaches the start dot
 $("playBtn").onclick = () => { if(armed || !running) return; hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=1.5; $("score").textContent="Приготовься… язык в удобное положение"; };
 
@@ -447,7 +447,11 @@ function drawGame(){
   gctx.beginPath(); track.forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke();
   // passed path
   const pi = Math.floor(progress);
-  if(pi>0 || railRev()){ gctx.strokeStyle="#C2306F"; gctx.lineWidth=14; gctx.shadowColor="#C2306F"; gctx.shadowBlur=12;
+  if($("playMode").value==="rail" && (playing||finished)){
+    const curLap = JUDG.lap===RAIL.lap;
+    for(let k=1;k<=cpIdx;k++){ const g=curLap && JUDG.seg[k]; strokePts(segPts(cpAt(k-1),cpAt(k)), g? g.c : "#C2306F", 14); }
+    if(!finished) strokePts(segPts(cpAt(cpIdx), Math.round(progress)), "#C2306F", 14);
+  } else if(pi>0 || railRev()){ gctx.strokeStyle="#C2306F"; gctx.lineWidth=14; gctx.shadowColor="#C2306F"; gctx.shadowBlur=12;
     gctx.beginPath(); (railRev()? track.slice(pi) : track.slice(0,pi+1)).forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); gctx.shadowBlur=0; }
   // start / finish
   const s=toGame(track[0]), f=toGame(track[track.length-1]);
@@ -459,7 +463,7 @@ function drawGame(){
   gctx.fillStyle="#1C2B4D"; gctx.font="bold 13px system-ui"; gctx.textAlign="center"; gctx.fillText("ФИНИШ", f[0], f[1]+33);
   // target (gold ring a little ahead of progress)
   for(let k=1;k<cps.length;k++){ const q=toGame(track[cpAt(k)]); const done=k<=cpIdx;
-    gctx.fillStyle = done ? "#C2306F" : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=3;
+    const gk = done && JUDG.lap===RAIL.lap && JUDG.seg[k]; gctx.fillStyle = done ? (gk? gk.c : "#C2306F") : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=3;
     gctx.beginPath(); gctx.arc(...q, done?9:7, 0, 7); gctx.fill(); gctx.stroke(); }
   if(cpFlash>0){ const q=toGame(track[cpAt(cpIdx)]); gctx.strokeStyle="rgba(242,182,50,"+(cpFlash/12)+")"; gctx.lineWidth=6;
     gctx.beginPath(); gctx.arc(...q, 18+(12-cpFlash)*2, 0, 7); gctx.stroke(); cpFlash--; }
@@ -556,7 +560,7 @@ function stepRail(now){
     while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
       if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
       RAIL.s=posOf(RAIL.u);
-      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS); if(RAIL.lap>=LAPS){ adv=0; break; } } }
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS); if(RAIL.lap>=LAPS){ adv=0; break; } } }
     // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
     if(tip && RAIL.prev && !RAIL.wrapped){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
       for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
@@ -568,7 +572,7 @@ function stepRail(now){
       const curl = Math.abs(RAIL.segTurnL)>1.1 && Math.sign(RAIL.segTurnT)===Math.sign(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)>0.5*Math.abs(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)<2.2*Math.abs(RAIL.segTurnL) && q>0.5;
       if(curl) RAIL.curls++;
       RAIL.segQ=0; RAIL.segW=0; RAIL.segTurnT=0; RAIL.segTurnL=0;
-      if(window.FX) FX.checkpoint(q, cpIdx, toGame(trackAt(RAIL.s)), curl); }
+      const gp=toGame(track[cpAt(cpIdx)]); judgeSeg(cpIdx, q, curl, gp); if(window.FX) FX.checkpoint(q, cpIdx, gp, curl); }
     progress = RAIL.s;
     const tech = Math.round(100*RAIL.qSum/Math.max(1e-6,RAIL.qW));
     $("score").textContent = `круг ${Math.min(LAPS,RAIL.lap+1)}/${LAPS} · техника ${tech}% · завитки ${RAIL.curls}`;
@@ -620,6 +624,22 @@ function drawRailHints(){
 
 // checkpoints: the track is split into steps; each one magnetises the cursor and re-centres you
 const CP_N = 10; let cps=[], cpIdx=0, cpFlash=0;
+// on-track judgement of every segment: ТОЧНО / ХОРОШО / ПОЧТИ / МИМО (+ ЗАВИТОК), the passed line keeps its colour
+const GRADE=[{min:0.85,t:"ТОЧНО!",c:"#F2B632"},{min:0.65,t:"ХОРОШО",c:"#2E9E6B"},{min:0.4,t:"ПОЧТИ",c:"#E8833A"},{min:-1,t:"МИМО",c:"#7D8DB3"}];
+const JUDG={seg:[], lap:-1, pops:[], n:0, last:null};
+function gradeOf(q){ return GRADE.find(g=>q>=g.min); }
+function judgeSeg(k,q,curl,pos){ const g=gradeOf(q); if(JUDG.lap!==RAIL.lap){ JUDG.lap=RAIL.lap; JUDG.seg=[]; }
+  JUDG.seg[k]=g; JUDG.n++; JUDG.last={k,q:Math.round(q*100)/100,g:g.t,curl:!!curl,n:JUDG.n};
+  JUDG.pops.push({t:curl? "ЗАВИТОК!" : g.t, c:curl? "#2BB3A3" : g.c, x:pos[0], y:pos[1], t0:performance.now(), big:curl||g===GRADE[0]});
+  if(JUDG.pops.length>6) JUDG.pops.shift(); }
+function segPts(a,b){ const lo=Math.min(a,b), hi=Math.max(a,b); return track.slice(lo,hi+1); }
+function strokePts(pts,col,w){ if(pts.length<2) return; gctx.strokeStyle=col; gctx.lineWidth=w; gctx.beginPath(); pts.forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); }
+function drawJudg(){ const now=performance.now(); JUDG.pops=JUDG.pops.filter(p=>now-p.t0<750);
+  for(const p of JUDG.pops){ const a=(now-p.t0)/750, k=a<0.15? 0.6+a/0.15*0.55 : 1.15-Math.min(0.15,(a-0.15)); const y=p.y-28-a*34;
+    gctx.font=`900 ${p.big?28:22}px system-ui`; const hw=gctx.measureText(p.t).width*k/2+10;
+    gctx.save(); gctx.globalAlpha= a>0.7 ? 1-(a-0.7)/0.3 : 1; gctx.translate(Math.max(hw,Math.min(game.width-hw,p.x)), Math.max(24,y)); gctx.scale(k,k); gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.lineJoin="round";
+    gctx.lineWidth=7; gctx.strokeStyle="#1C2B4D"; gctx.strokeText(p.t,0,0); gctx.fillStyle=p.c; gctx.fillText(p.t,0,0); gctx.restore(); }
+  gctx.textBaseline="alphabetic"; }
 function buildCps(){ cps=[]; for(let k=0;k<=CP_N;k++) cps.push(Math.round(k*(track.length-1)/CP_N)); cpIdx=0; }
 buildCps();
 function stepGame(){
@@ -813,7 +833,7 @@ function loop(){
     } else { lose(now); dsTick(now, null); }
   } else lose(now);
   if(rangeSamples && now > rangeUntil) finishRange();
-  guideTick(now); if($("playMode").value==="rail") stepRail(now); else stepGame(); if(window.FX) FX.tick(now, !!tip); drawGame(); drawRailHints(); if(window.FX) FX.draw(gctx, now); recordFrame(now);
+  guideTick(now); if($("playMode").value==="rail") stepRail(now); else stepGame(); if(window.FX) FX.tick(now, !!tip); drawGame(); drawRailHints(); drawJudg(); if(window.FX) FX.draw(gctx, now); recordFrame(now);
   if(now-statsAt>250){ statsAt=now; $("stats").textContent =
     `FPS ${fps.toFixed(0)}  лицо: ${lastLm?"да":"нет"}  язык: ${tip?"да":"нет"}\n`+
     `площадь языка (отн. рта): ${tongueArea.toFixed(2)}\n`+
@@ -840,7 +860,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
@@ -1106,16 +1126,16 @@ const FX = (() => {
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
     lap(k,n){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
-      if(curl){ lastStk=0; showSticker('curl',pos); }
-      if(q>=0.5){ misses=0; combo++; play('hit_tochno',{rate:Math.pow(2,Math.min(combo-1,12)/12)}); vib(q>0.85?V.perfect:V.hit);
+      if(curl){ play('stk_cleanline',{gain:.6}); vib([20,40,20]); }
+      if(q>=0.4 && q<0.65){ play('hit_tochno',{rate:0.84,gain:.45}); vib([15]); return; }   // ПОЧТИ: soft tick, combo kept
+      if(q>=0.65){ misses=0; combo++; play('hit_tochno',{rate:Math.pow(2,Math.min(combo-1,12)/12)}); vib(q>0.85?V.perfect:V.hit);
         if(q>0.85) play('slurp',{gain:.45,when:.02});
         if(combo===3){ play('combo_3',{when:.12}); vib(V.combo3); showSticker('combo3',pos,{sound:false}); }
         else if(combo===5){ vib(V.combo5); if(!showSticker('combo5',pos)) play('combo_5',{when:.12}); }
         else if(combo===10||(combo>10&&combo%10===0)){ play('combo_10',{when:.12}); vib(V.combo10); showSticker('combo10',pos,{sound:false}); }
         else if(combo===7){ showSticker('sniper',pos); }
-        else if(q>0.92) showSticker('tochno',pos);
       } else { combo=0; misses++; play('miss_bwop',{gain:.8}); vib(V.miss);
-        if(misses>=3){ misses=0; play('angry_steam',{gain:.7,when:.1}); showSticker('rest',pos,{bad:true}); } else showSticker('miss',pos,{bad:true}); }
+        if(misses>=3){ misses=0; play('angry_steam',{gain:.7,when:.1}); showSticker('rest',pos,{bad:true}); } }
     },
     finish(stars){ duck(0.12,0); play('finish_jingle'); vib(V.finish);
       for(let i=0;i<stars;i++) play('star_'+(i+1),{when:0.9+i*0.4}); setTimeout(()=>vib(V.stars.slice(0,stars*2-1)),900);
