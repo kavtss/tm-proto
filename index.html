@@ -16,7 +16,7 @@
     body.cam-on #view{position:fixed;z-index:50;top:calc(env(safe-area-inset-top) + 4px);left:50%;transform:translateX(-50%);width:48vw;height:auto;max-height:none;margin:0;border:3px solid var(--gold);border-radius:12px;box-shadow:0 6px 16px #000a}
     body.cam-on header{padding-top:calc(36vw + 16px)}
     body.cam-on .wrap > section:nth-child(2){order:-1}
-    body.cam-on #game{max-height:calc(100vh - 36vw - 70px);width:auto;max-width:100%;margin:0 auto;display:block}}
+    body.cam-on #game{max-height:calc(100vh - 36vw - 128px);width:auto;max-width:100%;margin:0 auto;display:block}}
   .panel{background:#0F1A33;border:3px solid #2C3D66;border-radius:18px;padding:10px;position:relative}
   .panel h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;color:#E9C9A0}
   canvas{width:100%;height:auto;display:block;border-radius:12px;background:#000}
@@ -34,6 +34,23 @@
   .big{font-size:28px;font-weight:900;color:var(--gold)}
   .hint{font-size:13px;color:#B9C3DA;margin:6px 0 0}
   #gameWrap{position:relative}
+  #hud{display:flex;gap:6px;align-items:stretch;margin-bottom:6px;color:var(--navy)}
+  #hud .h-task{background:#E6D6BC;border:3px solid var(--navy);border-radius:12px;padding:4px 10px;display:flex;flex-direction:column;justify-content:center;white-space:nowrap;min-width:112px}
+  #hud .h-task span{font-size:12px;font-weight:800}
+  #hud .h-task b{font-size:15px;font-weight:900}
+  #hud .h-task.on{background:var(--mag);color:#fff;animation:pulse .9s ease-in-out infinite alternate}
+  @keyframes pulse{to{transform:scale(1.05)}}
+  #hud .h-gs{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;background:var(--cream);border:3px solid var(--navy);border-radius:12px;padding:5px 8px}
+  #hud .h-g{display:flex;align-items:center;gap:5px;min-width:0}
+  #hud .h-l{font-size:11px;font-weight:900;letter-spacing:.04em;width:34px;flex:none}
+  #hud .h-e{font-size:13px;flex:none}
+  #hud .h-g b{font-size:12px;font-weight:900;width:84px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hud .h-g b.ok{color:#2E9E6B} #hud .h-g b.bad{color:#C2306F}
+  #hud .h-bar{position:relative;flex:1;min-width:40px;height:12px;border:2px solid var(--navy);border-radius:7px;background:#E6D6BC}
+  #hud .h-bar i{position:absolute;top:0;bottom:0;border-radius:5px;background:#9FD6BB}
+  #hud .h-bar i.ok{background:#2E9E6B}
+  #hud .h-bar em{position:absolute;top:-5px;width:6px;height:18px;margin-left:-3px;border-radius:3px;background:var(--mag);border:2px solid var(--navy);transition:left .08s linear}
+  @media (max-width:820px){#hud{gap:4px;margin-bottom:4px} #hud .h-task{min-width:96px;padding:3px 7px} #hud .h-task b{font-size:13px} #hud .h-gs{padding:4px 6px} #hud .h-g b{width:62px;font-size:11px}}
   #tipCard{position:absolute;left:50%;transform:translateX(-50%);top:8px;bottom:8px;width:min(94%,440px);background:var(--cream);color:var(--navy);border:4px solid var(--navy);border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;overflow:auto;box-shadow:0 6px 0 #000a;transition:opacity .2s}
   #tipCard.hide{opacity:0;pointer-events:none}
   #tipCard .tc-k{font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mag)}
@@ -76,6 +93,9 @@
 
   <section class="panel">
     <h2>Мини-трасса</h2>
+    <div id="hud"><div class="h-task" id="hTask"><span id="hLap">Круг —</span><b id="hTaskT">свой темп</b></div>
+      <div class="h-gs"><div class="h-g"><span class="h-l">ТЕМП</span><span class="h-e">🐢</span><div class="h-bar"><i id="hTempoBand"></i><em id="hTempoNeedle"></em></div><span class="h-e">⚡</span><b id="hTempoTxt">—</b></div>
+      <div class="h-g"><span class="h-l">ЯЗЫК</span><span class="h-e">🎯</span><div class="h-bar"><i id="hShapeBand"></i><em id="hShapeNeedle"></em></div><span class="h-e">🍦</span><b id="hShapeTxt">—</b></div></div></div>
     <div id="gameWrap"><canvas id="game" width="480" height="480"></canvas>
     <div id="tipCard"><div class="tc-k" id="tcKicker">ПЕРЕД ТРАССОЙ</div><div class="tc-top"><div class="tc-t" id="tcTitle"></div><canvas id="tcShape" width="160" height="160"></canvas></div><div class="tc-h" id="tcHead">СОВЕТ ТРЕНЕРА</div><div class="tc-x" id="tcText"></div><div class="tc-m" id="tcMeta"></div><div class="tc-g" id="tcGarden"></div><button class="primary" id="tcGo">К ТРАССЕ</button></div></div>
     <div class="row">
@@ -371,7 +391,7 @@ function showTipCard(kind, res){
   if(kind==="pre"){
     $("tcKicker").textContent="ПЕРЕД ТРАССОЙ"; $("tcTitle").textContent=name; $("tcHead").textContent="СОВЕТ ТРЕНЕРА";
     $("tcText").textContent=COACH[id]||COACH._n;
-    $("tcMeta").textContent=`${LAPS_BY_RANK[rank]} кругов · оценка: направление движения и завитки`;
+    $("tcMeta").textContent=`${LAPS_BY_RANK[rank]} кругов: `+LAP_PLAN[rank].map(k=>TASKS[k].icon? TASKS[k].icon+' '+TASKS[k].name : TASKS[k].name).join(' → ')+`. Первый круг — в своём темпе, по нему меряю «медленно» и «быстро». Над полем: зелёная зона — что нужно сейчас, розовая черта — что делаешь ты.`;
     $("tcGarden").textContent="🌷 Совет из сада: "+pickGarden(rank); $("tcGo").textContent= running ? "К ТРАССЕ" : "СНАЧАЛА ВКЛЮЧИ КАМЕРУ";
   } else {
     const {tech,curls,stars}=res;
@@ -380,7 +400,8 @@ function showTipCard(kind, res){
     $("tcText").textContent= tech>=80 ? "Чистая работа: направление держишь уверенно. Попробуй трассу посложнее или тот же рисунок медленнее и глубже."
       : tech>=60 ? "Хорошо. Чтобы было чище — сбавь темп на поворотах и доворачивай кончиком, а не всей головой."
       : "Направление гуляет. Веди медленнее и смотри на стрелку: сначала точный путь, скорость придёт сама.";
-    $("tcMeta").textContent= curls ? `Завитков засчитано: ${curls}. Чем ровнее поворот кончиком на изгибах, тем больше.` : "Завитков не засчитано: на изгибах линии делай поворот кончиком в ту же сторону.";
+    const tp = TEMPO.allT>1 ? ` Темп по заданию: ${Math.round(100*TEMPO.okT/TEMPO.allT)}%.` : '', sh = TEMPO.shAllT>1 ? ` Форма языка: ${Math.round(100*TEMPO.shOkT/TEMPO.shAllT)}%.` : '';
+    $("tcMeta").textContent= (curls ? `Завитков засчитано: ${curls}. Чем ровнее поворот кончиком на изгибах, тем больше.` : "Завитков не засчитано: на изгибах линии делай поворот кончиком в ту же сторону.")+tp+sh;
     $("tcGarden").textContent="🌷 Совет из сада: "+pickGarden(rank); $("tcGo").textContent="ЕЩЁ РАЗ";
   }
 }
@@ -526,7 +547,7 @@ function stepRail(now){
     if(left>0){ RAIL.waiting=true; return; }
     if(window.FX) FX.start(rank); RAIL.waiting=false; playing=true; armed=false;
     const L1_=track.length-1; RAIL.open = Math.hypot(track[0][0]-track[L1_][0], track[0][1]-track[L1_][1]) > 0.2;
-    Object.assign(RAIL,{s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
+    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0}); Object.assign(RAIL,{segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
     cpIdx=0;
   }
   const rev = () => RAIL.open && (RAIL.lap||0)%2===1;
@@ -547,7 +568,14 @@ function stepRail(now){
   RAIL.moving = !!tip && speed > 0.25;
   RAIL.ok = RAIL.moving && qf > 0.5;
   if(playing && !finished){
-    if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt; RAIL.qSum+=qf*w; RAIL.qW+=w; RAIL.segQ+=qf*w; RAIL.segW+=w;
+    TEMPO.v += ((RAIL.moving?speed:0)-TEMPO.v)*(1-Math.exp(-dt/0.35));
+    if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt;
+      if((RAIL.lap||0)===0){ TEMPO.pS+=speed*dt; TEMPO.pN+=dt; }
+      const task=lapTask(); let tk=1;
+      if(task!==TASKS.norm){ const o=taskOkNow(task); if(o!==null){ tk=o; RAIL.segTk+=o*dt; RAIL.segTn+=dt;
+          if(task.shape){ TEMPO.shOkT+=o*dt; TEMPO.shAllT+=dt; } else { TEMPO.okT+=o*dt; TEMPO.allT+=dt; } } }
+      const qq = qf*(0.45+0.55*tk);
+      RAIL.qSum+=qq*w; RAIL.qW+=w; RAIL.segQ+=qq*w; RAIL.segW+=w;
       const h=Math.atan2(RAIL.vel[1],RAIL.vel[0]); if(RAIL.lastHead!==null){ let d=h-RAIL.lastHead; d=Math.atan2(Math.sin(d),Math.cos(d)); RAIL.segTurnT+=d; } RAIL.lastHead=h; }
     else RAIL.lastHead=null;
     // smooth cursor speed (field units / s)
@@ -560,7 +588,7 @@ function stepRail(now){
     while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
       if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
       RAIL.s=posOf(RAIL.u);
-      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS); if(RAIL.lap>=LAPS){ adv=0; break; } } }
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1 && TEMPO.pN>1) TEMPO.pace=Math.max(0.7,Math.min(2.6,TEMPO.pS/TEMPO.pN)); RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS,lapTask()); if(RAIL.lap>=LAPS){ adv=0; break; } } }
     // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
     if(tip && RAIL.prev && !RAIL.wrapped){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
       for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
@@ -572,7 +600,8 @@ function stepRail(now){
       const curl = Math.abs(RAIL.segTurnL)>1.1 && Math.sign(RAIL.segTurnT)===Math.sign(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)>0.5*Math.abs(RAIL.segTurnL) && Math.abs(RAIL.segTurnT)<2.2*Math.abs(RAIL.segTurnL) && q>0.5;
       if(curl) RAIL.curls++;
       RAIL.segQ=0; RAIL.segW=0; RAIL.segTurnT=0; RAIL.segTurnL=0;
-      const gp=toGame(track[cpAt(cpIdx)]); judgeSeg(cpIdx, q, curl, gp); if(window.FX) FX.checkpoint(q, cpIdx, gp, curl); }
+      const task=lapTask(), tc = task!==TASKS.norm && RAIL.segTn>0.15 ? RAIL.segTk/RAIL.segTn : null; RAIL.segTk=0; RAIL.segTn=0;
+      const gp=toGame(track[cpAt(cpIdx)]); judgeSeg(cpIdx, q, curl, gp, tc==null? null : tc>=0.6 ? {t:task.good,c:'#2E9E6B'} : {t:task.fix,c:'#E8833A'}); if(window.FX) FX.checkpoint(q, cpIdx, gp, curl); }
     progress = RAIL.s;
     const tech = Math.round(100*RAIL.qSum/Math.max(1e-6,RAIL.qW));
     $("score").textContent = `круг ${Math.min(LAPS,RAIL.lap+1)}/${LAPS} · техника ${tech}% · завитки ${RAIL.curls}`;
@@ -589,9 +618,11 @@ function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(n
   const sp=Math.min(3,Math.hypot(RAIL.vel[0],RAIL.vel[1])); const t=RAIL.dir||[1,0]; const q = sp>1e-6 ? (RAIL.vel[0]*t[0]+RAIL.vel[1]*t[1])/sp : 0;
   LH.sp+=(sp-LH.sp)*a; LH.mv+=((RAIL.moving?1:0)-LH.mv)*a; if(RAIL.moving) LH.q+=(q-LH.q)*a;
   if(!playing) return tip ? "Веди язык по стрелке" : "Покажи кончик языка";
+  const task=lapTask(), v=TEMPO.v/TEMPO.pace, ok=task!==TASKS.norm ? taskOkNow(task) : 1;
   let h = !tip ? "Покажи кончик языка — я тебя потерял"
     : LH.mv<0.35 ? "Не замирай — веди дальше, сад ждёт"
-    : LH.sp>2.3 ? "Медленнее — сад не любит спешки"
+    : ok===0 ? (task.shape ? task.hint : v>task.band[1] ? "Медленнее — тяни каждый мазок" : "Быстрее — живой, бодрый ритм")
+    : task===TASKS.norm && v>task.band[1] && (RAIL.lap||0)>0 ? "Медленнее — сад не любит спешки"
     : LH.q<0.2 ? "Не туда — следуй за стрелкой"
     : LH.q<0.55 ? "Ближе к линии: смотри, куда показывает стрелка"
     : LH.sp<0.6 ? "Смелее — чуть шире и увереннее"
@@ -607,10 +638,24 @@ function drawFinish(){
   gctx.fillStyle="#FBF1E1"; gctx.font="900 34px system-ui"; gctx.fillText("ФИНИШ!", W/2, W/2+40);
   gctx.font="16px system-ui"; gctx.fillText("Нажми «Старт трассы», чтобы ещё раз", W/2, W/2+72);
 }
+function setBar(band,needle,lo,hi,val,ok){ band.style.left=(lo*100)+'%'; band.style.width=Math.max(3,(hi-lo)*100)+'%'; band.className=ok?'ok':'';
+  needle.style.display = val==null ? 'none' : ''; if(val!=null) needle.style.left=(Math.max(0,Math.min(1,val))*100)+'%'; }
+function updateHud(){ const n=LAPS_BY_RANK[curRank()], task= playing||finished ? lapTask() : TASKS.norm;
+  $("hLap").textContent = playing ? `Круг ${Math.min(RAIL.lap+1,n)}/${n}` : finished ? "Финиш" : `${n} кругов`;
+  const on = playing && task!==TASKS.norm; $("hTask").classList.toggle('on',on); $("hTaskT").textContent = on ? `${task.icon} ${task.t}` : "свой темп";
+  // tempo relative to your own pace (lap 1); green = what this lap asks for
+  const MAXR=2.2, v=TEMPO.v/TEMPO.pace, b=task.band, tok=v>=b[0]&&v<=b[1], moving=playing&&RAIL.moving;
+  setBar($("hTempoBand"),$("hTempoNeedle"), b[0]/MAXR, Math.min(1,b[1]/MAXR), playing? v/MAXR : null, tok&&moving);
+  const tt=$("hTempoTxt"); tt.textContent = !playing ? "—" : !moving ? "стоишь" : tok ? "✓ в зоне" : v<b[0] ? "быстрее!" : "медленнее!"; tt.className = !playing||!moving ? '' : tok ? 'ok' : 'bad';
+  // tongue shape: wide & soft = relaxed, narrow & pointed = tense (relative to your own range)
+  const r=(SHAPE.at && performance.now()-SHAPE.at<400) ? SHAPE.r : null, wide=task.shape==='wide', narrow=task.shape==='narrow';
+  const sok = r!=null && (wide? r>0.55 : narrow? r<0.45 : true);
+  setBar($("hShapeBand"),$("hShapeNeedle"), wide?0.55:0, narrow?0.45:1, r, task.shape? sok : false);
+  const st=$("hShapeTxt"); st.textContent = r==null ? "не вижу" : task.shape ? (sok?"✓ в зоне":wide?"расслабь!":"напряги!") : (r>0.7?"мягкий":r<0.35?"острый":"средний");
+  st.className = task.shape && r!=null ? (sok?'ok':'bad') : ''; }
 function drawRailHints(){
-  drawFinish(); if(finished) return;
+  updateHud(); drawFinish(); if(finished) return;
   if(armed && RAIL.count>0){ const W=game.width; gctx.fillStyle='rgba(28,43,77,.55)'; gctx.fillRect(0,0,W,W); gctx.fillStyle='#F2B632'; gctx.textAlign='center'; gctx.textBaseline='middle'; gctx.font='900 120px system-ui'; gctx.fillText(String(Math.ceil(RAIL.count)), W/2, W/2); gctx.textBaseline='alphabetic'; return; }
-  if(playing && RAIL.lap!==undefined){ const W=game.width; gctx.fillStyle='#1C2B4D'; gctx.font='900 22px system-ui'; gctx.textAlign='left'; gctx.fillText(`Круг ${Math.min(RAIL.lap+1,[5,5,6,6,7,8][TRACK_RANK[$("trackSel").value]??0])}`, 14, 30); }
   if($("playMode").value!=="rail" || !cursor) return;
   const c=toGame(cursor), d=RAIL.dir, L=46;
   // big arrow: which way to move the tongue now
@@ -624,13 +669,31 @@ function drawRailHints(){
 
 // checkpoints: the track is split into steps; each one magnetises the cursor and re-centres you
 const CP_N = 10; let cps=[], cpIdx=0, cpFlash=0;
+// ---------- lap tasks: slow down / speed up / relax the tongue (wide, soft) / tense it (narrow, pointed) ----------
+// tempo is measured against YOUR own pace from the first lap, so "slow" and "fast" mean slower/faster than you usually go
+const TASKS={
+  norm:{name:"обычный", icon:"", band:[0.55,1.6]},
+  slow:{name:"медленно", icon:"🐢", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
+  fast:{name:"быстрее", icon:"⚡", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
+  soft:{name:"мягкий язык", icon:"🍦", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
+  hard:{name:"острый язык", icon:"🎯", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
+const LAP_PLAN=[["norm","norm","slow","norm","fast"],["norm","slow","norm","fast","norm"],["norm","slow","fast","soft","norm","norm"],
+  ["norm","slow","soft","fast","hard","norm"],["norm","soft","slow","hard","fast","soft","norm"],["norm","slow","hard","fast","soft","slow","hard","fast"]];
+const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0};
+function curRank(){ return TRACK_RANK[$("trackSel").value] ?? 0; }
+function lapTask(){ const plan=LAP_PLAN[curRank()]; return TASKS[plan[Math.min(plan.length-1, RAIL.lap||0)]]; }
+function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape not visible)
+  const v=TEMPO.v/TEMPO.pace, tempoOk = v>=task.band[0] && v<=task.band[1];
+  if(task.shape){ if(!SHAPE.at || performance.now()-SHAPE.at>400 || SHAPE.r==null) return null;
+    return (task.shape==="wide" ? SHAPE.r>0.55 : SHAPE.r<0.45) ? 1 : 0; }
+  return tempoOk?1:0; }
 // on-track judgement of every segment: ТОЧНО / ХОРОШО / ПОЧТИ / МИМО (+ ЗАВИТОК), the passed line keeps its colour
 const GRADE=[{min:0.85,t:"ТОЧНО!",c:"#F2B632"},{min:0.65,t:"ХОРОШО",c:"#2E9E6B"},{min:0.4,t:"ПОЧТИ",c:"#E8833A"},{min:-1,t:"МИМО",c:"#7D8DB3"}];
 const JUDG={seg:[], lap:-1, pops:[], n:0, last:null};
 function gradeOf(q){ return GRADE.find(g=>q>=g.min); }
-function judgeSeg(k,q,curl,pos){ const g=gradeOf(q); if(JUDG.lap!==RAIL.lap){ JUDG.lap=RAIL.lap; JUDG.seg=[]; }
-  JUDG.seg[k]=g; JUDG.n++; JUDG.last={k,q:Math.round(q*100)/100,g:g.t,curl:!!curl,n:JUDG.n};
-  JUDG.pops.push({t:curl? "ЗАВИТОК!" : g.t, c:curl? "#2BB3A3" : g.c, x:pos[0], y:pos[1], t0:performance.now(), big:curl||g===GRADE[0]});
+function judgeSeg(k,q,curl,pos,sub){ const g=gradeOf(q); if(JUDG.lap!==RAIL.lap){ JUDG.lap=RAIL.lap; JUDG.seg=[]; }
+  JUDG.seg[k]=g; JUDG.n++; JUDG.last={k,q:Math.round(q*100)/100,g:g.t,curl:!!curl,task:sub&&sub.t,n:JUDG.n};
+  JUDG.pops.push({t:curl? "ЗАВИТОК!" : g.t, c:curl? "#2BB3A3" : g.c, x:pos[0], y:pos[1], t0:performance.now(), big:curl||g===GRADE[0], sub});
   if(JUDG.pops.length>6) JUDG.pops.shift(); }
 function segPts(a,b){ const lo=Math.min(a,b), hi=Math.max(a,b); return track.slice(lo,hi+1); }
 function strokePts(pts,col,w){ if(pts.length<2) return; gctx.strokeStyle=col; gctx.lineWidth=w; gctx.beginPath(); pts.forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); }
@@ -638,7 +701,9 @@ function drawJudg(){ const now=performance.now(); JUDG.pops=JUDG.pops.filter(p=>
   for(const p of JUDG.pops){ const a=(now-p.t0)/750, k=a<0.15? 0.6+a/0.15*0.55 : 1.15-Math.min(0.15,(a-0.15)); const y=p.y-28-a*34;
     gctx.font=`900 ${p.big?28:22}px system-ui`; const hw=gctx.measureText(p.t).width*k/2+10;
     gctx.save(); gctx.globalAlpha= a>0.7 ? 1-(a-0.7)/0.3 : 1; gctx.translate(Math.max(hw,Math.min(game.width-hw,p.x)), Math.max(24,y)); gctx.scale(k,k); gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.lineJoin="round";
-    gctx.lineWidth=7; gctx.strokeStyle="#1C2B4D"; gctx.strokeText(p.t,0,0); gctx.fillStyle=p.c; gctx.fillText(p.t,0,0); gctx.restore(); }
+    gctx.lineWidth=7; gctx.strokeStyle="#1C2B4D"; gctx.strokeText(p.t,0,0); gctx.fillStyle=p.c; gctx.fillText(p.t,0,0);
+    if(p.sub){ gctx.font='900 16px system-ui'; gctx.lineWidth=5; gctx.strokeText(p.sub.t,0,24); gctx.fillStyle=p.sub.c; gctx.fillText(p.sub.t,0,24); }
+    gctx.restore(); }
   gctx.textBaseline="alphabetic"; }
 function buildCps(){ cps=[]; for(let k=0;k<=CP_N;k++) cps.push(Math.round(k*(track.length-1)/CP_N)); cpIdx=0; }
 buildCps();
@@ -757,7 +822,7 @@ function detectTongueNN(lm, W, H){
     SHAPE.w = SHAPE.w==null ? wRel : SHAPE.w*0.7 + wRel*0.3;
     SHAPE.max = Math.max(SHAPE.max*0.999, SHAPE.w); SHAPE.min = Math.min(SHAPE.min*1.001+0.0001, SHAPE.w);
     const span=Math.max(0.05, SHAPE.max-SHAPE.min), r=(SHAPE.w-SHAPE.min)/span;
-    SHAPE.label = r>0.7 ? "широкий" : r<0.35 ? "узкий / острый" : "средний";
+    SHAPE.label = r>0.7 ? "широкий" : r<0.35 ? "узкий / острый" : "средний"; SHAPE.r=r; SHAPE.at=performance.now();
     SHAPE.img=[m.unmap(eA), m.unmap(eB)];
   } else SHAPE.img=null;
   // face-relative coords, same convention as the colour method
@@ -860,7 +925,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
@@ -1124,7 +1189,7 @@ const FX = (() => {
     if(sound && d[3]) play(d[3],{gain:.9,when:.05}); if(musicSrc && bad) duck(0.15,600); return true; }
   return {
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
-    lap(k,n){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
+    lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`+(task&&task.t? ` · ${task.icon} ${task.t}` : ''); showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
       if(curl){ play('stk_cleanline',{gain:.6}); vib([20,40,20]); }
       if(q>=0.4 && q<0.65){ play('hit_tochno',{rate:0.84,gain:.45}); vib([15]); return; }   // ПОЧТИ: soft tick, combo kept
