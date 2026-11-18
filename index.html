@@ -12,7 +12,11 @@
   header{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   h1{font-size:18px;margin:0;font-weight:800}
   .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:0 12px 12px}
-  @media (max-width:820px){.wrap{grid-template-columns:1fr;padding:0 8px 8px;gap:8px} #view{max-height:26vh;width:auto;max-width:100%;margin:0 auto} header{padding:8px 12px} .panel{padding:8px} .panel .hint{display:none}}
+  @media (max-width:820px){.wrap{grid-template-columns:1fr;padding:0 8px 8px;gap:8px} #view{max-height:26vh;width:auto;max-width:100%;margin:0 auto} header{padding:8px 12px} .panel{padding:8px} .panel .hint{display:none}
+    body.cam-on #view{position:fixed;z-index:50;top:calc(env(safe-area-inset-top) + 4px);left:50%;transform:translateX(-50%);width:48vw;height:auto;max-height:none;margin:0;border:3px solid var(--gold);border-radius:12px;box-shadow:0 6px 16px #000a}
+    body.cam-on header{padding-top:calc(36vw + 16px)}
+    body.cam-on .wrap > section:nth-child(2){order:-1}
+    body.cam-on #game{max-height:calc(100vh - 36vw - 70px);width:auto;max-width:100%;margin:0 auto;display:block}}
   .panel{background:#0F1A33;border:3px solid #2C3D66;border-radius:18px;padding:10px;position:relative}
   .panel h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;color:#E9C9A0}
   canvas{width:100%;height:auto;display:block;border-radius:12px;background:#000}
@@ -173,7 +177,8 @@ const RW = 128, RH = 128; roiCanvas.width = RW; roiCanvas.height = RH;
 let landmarker = null, running = false, lastTs = -1;
 let skin = null;            // {cr, cb, sd} skin chroma stats
 let tongueModel = null;     // {cr, cb, sd} from calibration
-let lastR, statsAt = 0;
+let lastR, statsAt = 0, hasVFC = false, vfNew = true, tapHold = 0;
+document.addEventListener('pointerdown', ()=>{ tapHold = performance.now()+150; }, {capture:true, passive:true});
 let tip = null, tipRaw = null, tongueArea = 0, fps = 0, lastFrame = performance.now();
 
 // ---------- colour helpers ----------
@@ -676,6 +681,8 @@ async function start(){
     const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"user", width:{ideal:960}, height:{ideal:720} }, audio:false });
     video.srcObject = stream; await video.play();
     view.width = video.videoWidth; view.height = video.videoHeight;
+    document.body.classList.add('cam-on'); setTimeout(()=>window.scrollTo(0,0),50);
+    if(video.requestVideoFrameCallback){ hasVFC=true; const vf=()=>{ vfNew=true; video.requestVideoFrameCallback(vf); }; video.requestVideoFrameCallback(vf); }
     running = true; $("rangeBtn").disabled=false; $("recBtn").disabled=false; $("dsRec").disabled=false; $("playBtn").disabled=false;
     $("status").textContent="Камера работает. Открой рот и подвигай кончиком языка — калибровка цвета не нужна.";
     requestAnimationFrame(loop);
@@ -698,8 +705,9 @@ function loop(){
   const W=view.width, H=view.height;
   vctx.drawImage(video,0,0,W,H);
   let fresh=false;
-  if(video.currentTime !== lastTs){
-    lastTs = video.currentTime; fresh=true;
+  const newFrame = hasVFC ? vfNew : video.currentTime !== lastTs;
+  if(newFrame && now >= tapHold){
+    lastTs = video.currentTime; vfNew=false; fresh=true;
     const res = landmarker.detectForVideo(video, now);
     lastLm = res.faceLandmarks && res.faceLandmarks[0] ? res.faceLandmarks[0] : null;
   }
