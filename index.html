@@ -33,6 +33,20 @@
   .stats{font:12px/1.5 ui-monospace,Menlo,monospace;color:#B9C3DA;white-space:pre}
   .big{font-size:28px;font-weight:900;color:var(--gold)}
   .hint{font-size:13px;color:#B9C3DA;margin:6px 0 0}
+  #gameWrap{position:relative}
+  #tipCard{position:absolute;left:50%;transform:translateX(-50%);top:8px;bottom:8px;width:min(94%,440px);background:var(--cream);color:var(--navy);border:4px solid var(--navy);border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;overflow:auto;box-shadow:0 6px 0 #000a;transition:opacity .2s}
+  #tipCard.hide{opacity:0;pointer-events:none}
+  #tipCard .tc-k{font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mag)}
+  #tipCard .tc-t{font-size:24px;font-weight:900;line-height:1.1}
+  #tipCard .tc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  #tipCard #tcShape{width:76px;height:76px;flex:none;background:#fff;border:3px solid var(--navy);border-radius:14px}
+  #tipCard .tc-h{margin-top:4px;font-size:11px;font-weight:900;letter-spacing:.12em;color:#7A5A2E}
+  #tipCard .tc-x{font-size:16px;line-height:1.35;font-weight:600}
+  #tipCard .tc-m{font-size:13px;font-weight:800;color:#2C3D66}
+  #tipCard .tc-g{font-size:13px;line-height:1.35;background:#F3E3C6;border-radius:12px;padding:8px 10px}
+  #tipCard .tc-g:empty{display:none}
+  #tipCard button{margin-top:auto;align-self:stretch}
+  @media (max-width:820px){#tipCard{padding:10px 12px;gap:4px;border-radius:16px} #tipCard .tc-t{font-size:20px} #tipCard .tc-x{font-size:14px} #tipCard .tc-m,#tipCard .tc-g{font-size:12px} #tipCard #tcShape{width:56px;height:56px} #tipCard button{padding:8px}}
   .status{font-size:14px;padding:6px 10px;border-radius:10px;background:#2C3D66}
 </style>
 </head>
@@ -62,7 +76,8 @@
 
   <section class="panel">
     <h2>Мини-трасса</h2>
-    <canvas id="game" width="480" height="480"></canvas>
+    <div id="gameWrap"><canvas id="game" width="480" height="480"></canvas>
+    <div id="tipCard"><div class="tc-k" id="tcKicker">ПЕРЕД ТРАССОЙ</div><div class="tc-top"><div class="tc-t" id="tcTitle"></div><canvas id="tcShape" width="160" height="160"></canvas></div><div class="tc-h" id="tcHead">СОВЕТ ТРЕНЕРА</div><div class="tc-x" id="tcText"></div><div class="tc-m" id="tcMeta"></div><div class="tc-g" id="tcGarden"></div><button class="primary" id="tcGo">К ТРАССЕ</button></div></div>
     <div class="row">
       <select id="trackSel" autocomplete="off">
         <optgroup label="0. Новичок (обучение)">
@@ -124,7 +139,7 @@
         <option value="bg_game_disco">Диско-шёлк</option><option value="bg_game_house">Глубокий хаус</option><option value="off">без музыки</option></select></label>
     </div>
     <div class="row">
-      <button id="recBtn" disabled>● Записать лог (15 сек)</button>
+      <button id="recBtn" disabled>● Записать лог (30 сек, до финиша)</button>
       <span class="big" id="score"></span>
     </div>
     <p class="hint">1) «Калибровка зоны» — 4 секунды обводи языком большой круг: поле подгонится под твой размах. 2) «Старт трассы» — где сейчас кончик языка, там и старт: тянуться к точке не нужно. «Размах» — насколько маленькое движение языка двигает курсор далеко. Серая тень — реальное положение языка, розовый курсор притягивается к линии. Если сильно ушёл — курсор сереет и пунктир показывает, куда вернуться; прогресс при этом стоит, а не сбрасывается.</p>
@@ -344,11 +359,41 @@ function makeTrack(kind){
   return pts;
 }
 let track = makeTrack("t_c_r"), progress = 0, playing=false, armed=false, onLine=0, total=0, finished=false;
-$("trackSel").onchange = () => { track = makeTrack($("trackSel").value); buildCps(); resetRun(); };
+$("trackSel").onchange = () => { track = makeTrack($("trackSel").value); buildCps(); resetRun(); showTipCard("pre"); };
+// ---------- coach tips: before the track (technique of this shape) and after it (feedback + a garden tip) ----------
+const COACH = {"a": "Серп — длинная мягкая дуга от края к центру. Веди широко и плавно, будто гладишь створки плоским языком.", "k": "Крючки: короткий заход сбоку и плавный разворот. Хороши, когда она любит касания с одной стороны.", "l": "Молния — острые изломы. На каждом углу на миг притормози и чётко смени направление. Острый рисунок — только для разогретого сада.", "d": "Чаши: плавные дуги без углов. Начинай с них, если сад ещё только просыпается.", "v": "Скобки — две дуги лицом друг к другу. Обводи лепестки с обеих сторон, жемчужину напрямую не трогай.", "b": "Спираль: маленькие круги внутрь — плотнее, наружу — легче. Центр не перегревается.", "e": "Пила — ровные зубцы: вверх чуть быстрее, вниз плавно. Острый рисунок — только для разогретого сада.", "g": "Три прямых и три угла. Стороны веди ровно, без спешки, на углах — короткий поворот кончиком.", "i": "Восьмёрка — два маленьких овала, которые пересекаются на шапочке. Без рывков, волна растёт ровно.", "n": "Зигзаг будит, петля успокаивает. Углы — лёгким кончиком, петлю — мягко и плотнее.", "o": "Гребни — волна за волной. Ритм ровный, нажим растёт постепенно от гребня к гребню.", "p": "Узелок — маленький тугой завиток кончиком на месте, потом плавно дальше по линии.", "zh": "Бантик — две петли от одного центра. Центр — шапочка: проходи его мягко, петли делай шире и смелее.", "z": "Две петли подряд в одну сторону. Не разгоняйся на второй — тот же темп и тот же завиток.", "m": "Решётка — длинные линии крест-накрест. Ровный нажим по всей длине, на пересечениях без рывков.", "_n": "Учимся вести кончик: медленно, по стрелке, без рывков. Точное попадание не важно — важно направление."};
+const GARDEN = {"1": ["Ты здесь не сдавать экзамен, а дарить удовольствие. Расслабленный садовник — лучший садовник.", "Сад чувствует сомнения. Если идёшь — иди с удовольствием, а не «потому что надо».", "Перед прогулкой по саду договоритесь: что можно, куда не идём и какое слово значит «пауза».", "Уверенное «можно» заводит сильнее любой техники. Спроси — это тоже часть игры.", "Тёплая вода, чистое полотенце, салфетки и роса под рукой — саду спокойно, голове тоже.", "Пара капель росы поверх своей делает касания мягче, а удовольствие — дольше.", "Приглуши свет, убери телефон, сделайте пару глубоких вдохов вместе. Сад не любит спешки.", "Сад начинается с шеи, ушей и поцелуев. Чем дольше прелюдия, тем щедрее урожай.", "Целуй бёдра изнутри, медленно приближаясь. Ожидание — половина удовольствия.", "Подыши на створки, не касаясь. Тёплое дыхание будит сад лучше любых слов.", "Не стучись в персик с порога: сначала разогрей весь сад — бёдра, лобок, створки.", "Маршрут всегда от забора к клумбе: от краёв к жемчужине, а не наоборот.", "Первый мазок — острым кончиком снизу вверх через всю ракушку. Эффект как от первого снега.", "Борода садовника колется. Ухоженная мягкая или гладко выбритая — сад скажет спасибо.", "Свежая щетина — наждак для лепестков. Брейся заранее, а не прямо перед прогулкой.", "Бальзам или масло для бороды делают её мягче. Колючая борода — минус очки.", "Губы садовника тоже инструмент. Сухие и обветренные — намажь бальзамом заранее.", "Скажи ей, что тебе нравится этот сад. Уверенность садовницы в себе — лучшая роса.", "Ей может быть неловко. Пара тёплых слов снимает зажим лучше любой техники.", "Не обсуждай запахи и вкус вслух — разве что комплиментом. Сад пахнет садом, это нормально.", "Лучшая карта сада — у садовницы. Спроси, как она ухаживает за ним сама, а лучше попроси показать.", "Запоминай всё: где она касается, с какой стороны, вверх-вниз или по кругу и в какую сторону.", "Повтори её собственное движение языком — это и есть ключ от сада."], "2": ["Жемчужина больше, чем кажется: её корни уходят под створки. Ласкай ракушку целиком.", "Если сразу идти в центр, жемчужина быстро «перегревается». Сначала рамка — лепестки и основание.", "Иногда жемчужина прячется под шапочкой. Помоги пальцами бережно приоткрыть створки.", "Слишком нежная жемчужина? Работай через шапочку или чуть выше, не напрямую.", "Лепестки бывают очень разными по форме и цвету — и это нормально. Нет «правильного» сада.", "Чувствительность меняется от дня к дню. Вчерашний рецепт сегодня может не сработать.", "Не чисти зубы и не пользуйся нитью прямо перед садом: микроранки во рту — лишний риск.", "Новая садовница? Подумай о защите: латексная салфетка — тоже инвентарь, а не позор.", "Есть простуда на губах или ранки во рту — сегодня сад отдыхает.", "Никогда не задувай воздух внутрь ракушки. Дуть можно только снаружи и легко.", "С заднего двора в сад инструменты не переносят. Сначала помой — или поменяй маршрут.", "Роса на водной основе — лучший выбор: не липнет и легко смывается.", "Устраивайся удобно, ты тут надолго. Валик или подушка под персик — и шея скажет спасибо.", "Садовница на краю кровати, ты на полу с подушкой под коленями — лучший обзор и целая шея.", "На боку подложи ей подушку между коленей: сад открыт, спина отдыхает.", "Локти — на матрас, а не в воздух. Комфорт важнее красивой картинки.", "Если она сверху над тобой — пусть сама управляет. Твоя задача — дать ей опору руками.", "Затекла шея — смени позу, не прекращая ласк. Переход тоже может быть частью игры.", "Большими пальцами мягко раскрой лепестки — язык спокойно работает в открытом окне.", "У садовника две руки: одна гладит сад повыше, другая может заглянуть в ракушку — по её слову.", "Пальцы внутри не долбят. Глубоко, медленно и манящим движением «иди сюда».", "Чистые руки и коротко стриженные ногти — главный инвентарь садовника.", "Положи ладонь ей на низ живота и слегка прижми — так ощущения ярче.", "Держи её за руку. Простой жест, который делает вас ближе прямо в процессе."], "3": ["Язык — мышца. Тянись кончиком к носу и подбородку по 10 раз — и выносливость растёт.", "Рисуй языком цифры от 1 до 10 на внутренней стороне щеки. Так тренирует чемпион.", "Упрись кончиком языка в нёбо на 10 секунд, потом расслабь. Повтори 10 раз.", "Свёрни язык трубочкой и держи. Не получается — это генетика, не переживай.", "Пей воду между раундами. Сухой язык устаёт в два раза быстрее.", "Устал язык — работай губами. Устали губы — пальцами. Ритм не должен прерываться.", "Основа — плоский мягкий язык и губы. Острый кончик — только короткими штрихами и ближе к финалу.", "Язык плашмя, как для мороженого, только не слизывай: положи и двигайся, не отрывая.", "Кончик — для смелых жемчужин. Меняй нажим от лёгкого к сильному и жди «да, вот так».", "Вытяни язык во всю длину и накрой ракушку целиком. Двигайся как шёлковый платок, без нажима.", "Обними шапочку губами, как в поцелуе, — это бережнее и стабильнее, чем один кончик.", "Приём для мастеров: лёгкий поцелуй-присоска на жемчужине и кончик языка в деле.", "Меняй рисунок, а не скорость: новая трасса освежает ощущения без рывка.", "Используй не только кончик, но и всю поверхность языка — она мягче и шире.", "Попробуй медленно провести языком снизу до самой шапочки — как будто открываешь створки.", "Двигай головой, а не только языком. Шея сильнее — язык отдыхает.", "Алфавит: пиши маленькие буквы у шапочки. Услышал глубокий вдох — это её буква. Дальше не учись, держи её.", "Маятник: от края лепестков к шапочке и обратно, пауза наверху на выдохе. Вниз — шире, вверх — точнее.", "Восьмёрка — два маленьких овала, которые пересекаются на шапочке. Без рывков, волна растёт ровно.", "Капля: медленно вверх, задержка наверху, вниз почти без нажима. Для самых чувствительных садов.", "Спираль: маленькие круги внутрь — плотнее, наружу — легче. Центр не перегревается.", "Трассы в этой игре взяты со схемы сварных швов. Это не шутка — пробуй все.", "Крючки: короткий заход сбоку и плавный разворот. Хороши, когда она любит касания с одной стороны.", "Чаши: плавные дуги без углов. Начинай с них, если сад ещё только просыпается.", "Пила и молния — острые рисунки. Только когда сад уже разогрет."], "4": ["Поймал ритм — держи до конца. За ускорение здесь бонусов не дают.", "Лестница: держи один рисунок 20–40 секунд, потом на полшага плотнее — и снова держи.", "На последней ступени лестницы ничего не меняй, даже если очень хочется «побыстрее».", "Метроном: включи музыку с ровным битом. Она гасит желание ускоряться от волнения.", "Она близко? Ничего не меняй: ни скорость, ни нажим, ни трассу.", "Синхронизируйся с её движениями бёдрами: она подаётся навстречу — держи этот темп.", "Если она сама начала двигаться — замри и дай ей вести. Это лучший комплимент.", "Темп «как сердце в покое» почти всегда лучше, чем «как сердце на пробежке».", "Дыши ровно и слышно: усилие на длинном выдохе, лёгкий след на вдохе. Ей легче отпустить контроль.", "Добавь пульс: мягко сжимай и отпускай шапочку губами в такт её дыханию.", "Дыши носом, а не задерживай дыхание. Садовник без воздуха быстро сдаётся.", "Её дыхание стало глубоким и ровным — ты на правильной трассе.", "Дыхание и лицо — вот твоё настоящее табло очков.", "Договоритесь о словах-кнопках: ниже, выше, мягче, держи так, пауза. Вы команда, а не угадайка.", "Дыхание пропало, бёдра сжались, плечи поднялись? Перегруз. Спроси «мягче?» и смени рисунок.", "Сад «онемел» — значит нужно не быстрее, а шире и мягче.", "Сухо или больно — стоп. Добавь росы и работай плоским языком, а не иглой.", "Она прижимает тебя рукой? Это не «быстрее», а «вот здесь, не уходи».", "Отстраняется бёдрами — слишком сильно. Ослабь нажим, но не убегай.", "Звуки стихли — не всегда плохо. Часто это значит, что она очень близко. Не меняй ничего.", "Спроси глазами. Короткий взгляд снизу вверх говорит больше вопроса вслух.", "Миф: важна скорость. Правда: важна стабильность. Чемпионы не гонят.", "Миф: сильнее — значит лучше. Правда: чаще всего нужно мягче, чем ты думаешь.", "Миф: все сады одинаковые. Правда: что работает с одной, может не работать с другой."], "5": ["Почувствовал, что она на 80%? Убери язык на 5–10 секунд: подыши, поцелуй бёдра — и возвращайся.", "Каждая такая пауза поднимает потолок. Начни с одной-двух, мастера доходят до пяти.", "Но если она уже на финишной прямой — ни шагу назад. Остановиться там — главный фол игры.", "Финиш бывает тихим. Не жди фейерверка — смотри на тело и дыхание.", "Не каждый раз должен заканчиваться финалом. Иногда сад просто наслаждается прогулкой.", "Не спрашивай «ты закончила?». Если не уверен — продолжай мягко и слушай.", "Она просит остановиться — останавливаешься. Сразу и без обид.", "После финала жемчужина очень чувствительна. Накрой её мягким языком и замри.", "Когда волны начнут стихать, сдвинься на миллиметр — может прийти ещё одна. И снова замри.", "Её «стоп» сильнее любого рекорда. Не хочет продолжения — значит, не продолжаешь.", "Вода, плед и пара минут обнимашек. Не спеши дальше — дай ей насладиться моментом.", "Не спрашивай «ну как я?». Спроси, что понравилось больше всего и что добавить в следующий раз.", "Если сад натёрт или пощипывает — дайте ему отдохнуть, а в следующий раз больше рамки и росы.", "Сад у каждой свой. Новая садовница — новая карта, и разведку начинаешь заново.", "Это не экзамен на талант, а общий язык. Любопытство делает близость глубже любой секретной техники.", "Поцелуй её не только в сад. Вернись к губам, шее, плечам.", "Смешной момент или неловкость? Посмейтесь вместе. Юмор — лучшая роса для близости.", "Запомни, что сработало, и в следующий раз начни с этого — но не по шаблону.", "Мастер сада не тот, кто знает все трассы, а тот, кто слышит садовницу.", "Повторение — мать урожая. Одна и та же любимая трасса может стать её любимым ритуалом.", "Спроси, хочет ли она попробовать что-то новое. Иногда сад мечтает о новой клумбе.", "Делись не только техникой, но и вниманием. Самый сильный рисунок — заинтересованность."]};
+const LAPS_BY_RANK=[5,5,6,6,7,8];
+function pickGarden(rank){ const a=GARDEN[Math.max(1,rank)]||GARDEN[1]; return a[Math.floor(Math.random()*a.length)]; }
+function showTipCard(kind, res){
+  const id=$("trackSel").value, rank=TRACK_RANK[id]??0, name=$("trackSel").selectedOptions[0].textContent;
+  const card=$("tipCard"); card.classList.remove("hide"); drawTipShape();
+  if(kind==="pre"){
+    $("tcKicker").textContent="ПЕРЕД ТРАССОЙ"; $("tcTitle").textContent=name; $("tcHead").textContent="СОВЕТ ТРЕНЕРА";
+    $("tcText").textContent=COACH[id]||COACH._n;
+    $("tcMeta").textContent=`${LAPS_BY_RANK[rank]} кругов · оценка: направление движения и завитки`;
+    $("tcGarden").textContent="🌷 Совет из сада: "+pickGarden(rank); $("tcGo").textContent= running ? "К ТРАССЕ" : "СНАЧАЛА ВКЛЮЧИ КАМЕРУ";
+  } else {
+    const {tech,curls,stars}=res;
+    $("tcKicker").textContent="ФИНИШ · "+"★".repeat(stars)+"☆".repeat(3-stars); $("tcTitle").textContent=`Техника ${tech}%`;
+    $("tcHead").textContent="РАЗБОР ТРЕНЕРА";
+    $("tcText").textContent= tech>=80 ? "Чистая работа: направление держишь уверенно. Попробуй трассу посложнее или тот же рисунок медленнее и глубже."
+      : tech>=60 ? "Хорошо. Чтобы было чище — сбавь темп на поворотах и доворачивай кончиком, а не всей головой."
+      : "Направление гуляет. Веди медленнее и смотри на стрелку: сначала точный путь, скорость придёт сама.";
+    $("tcMeta").textContent= curls ? `Завитков засчитано: ${curls}. Чем ровнее поворот кончиком на изгибах, тем больше.` : "Завитков не засчитано: на изгибах линии делай поворот кончиком в ту же сторону.";
+    $("tcGarden").textContent="🌷 Совет из сада: "+pickGarden(rank); $("tcGo").textContent="ЕЩЁ РАЗ";
+  }
+}
+function drawTipShape(){ const c=$("tcShape"), x=c.getContext("2d"); x.clearRect(0,0,c.width,c.height); if(!track||!track.length) return;
+  const k=c.width/game.width; x.save(); x.scale(k,k); x.lineCap=x.lineJoin="round";
+  x.strokeStyle="#C2306F"; x.lineWidth=22; x.beginPath(); track.forEach((q,i)=>{ const g=toGame(q); i?x.lineTo(g[0],g[1]):x.moveTo(g[0],g[1]); }); x.stroke();
+  const g0=toGame(track[0]); x.fillStyle="#2E9E6B"; x.beginPath(); x.arc(g0[0],g0[1],26,0,7); x.fill(); x.restore(); }
+function hideTipCard(){ $("tipCard").classList.add("hide"); }
+$("tcGo").onclick = () => { if(!running){ $("startBtn").scrollIntoView({block:"center"}); return; } $("playBtn").click(); };
 let anchor=null;
 function resetRun(){ RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
 // "Старт": run arms; it begins when the cursor reaches the start dot
-$("playBtn").onclick = () => { if(armed) return; resetRun(); armed=true; armedAt=performance.now(); RAIL.count=1.5; $("score").textContent="Приготовься… язык в удобное положение"; };
+$("playBtn").onclick = () => { if(armed || !running) return; hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=1.5; $("score").textContent="Приготовься… язык в удобное положение"; };
 
 // ---------- personal range calibration: tongue circle → maps your reach onto the field ----------
 let range = { cx:0, cy:0, rx:0.9, ry:0.9 };   // defaults: the mouth opening fills the field
@@ -363,7 +408,7 @@ function finishRange(){
             rx:Math.max(0.12,(q(xs,.95)-q(xs,.05))/2), ry:Math.max(0.12,(q(ys,.95)-q(ys,.05))/2) };
   $("status").textContent = "Зона сохранена: поле подогнано под твой размах языка.";
 }
-$("rangeBtn").onclick = () => { rangeSamples = []; rangeUntil = performance.now()+4000;
+$("rangeBtn").onclick = () => { hideTipCard(); rangeSamples = []; rangeUntil = performance.now()+4000;
   $("status").textContent = "4 секунды: медленно обведи языком большой круг…"; };
 
 // ---------- One Euro filter (smooth when still, responsive when moving) ----------
@@ -528,12 +573,27 @@ function stepRail(now){
     const tech = Math.round(100*RAIL.qSum/Math.max(1e-6,RAIL.qW));
     $("score").textContent = `круг ${Math.min(LAPS,RAIL.lap+1)}/${LAPS} · техника ${tech}% · завитки ${RAIL.curls}`;
     if(RAIL.lap>=LAPS){ finished=true; playing=false; finishAt=now;
-      const st = rank===0 ? [55,35] : [75,55]; const stars = tech>=st[0]?3:tech>=st[1]?2:1; if(window.FX) FX.finish(stars);
+      const st = rank===0 ? [55,35] : [75,55]; const stars = tech>=st[0]?3:tech>=st[1]?2:1; if(window.FX) FX.finish(stars); setTimeout(()=>showTipCard('post',{tech,curls:RAIL.curls,stars}),1600);
       $("score").textContent = `ФИНИШ · ${"★".repeat(stars)}${"☆".repeat(3-stars)} · техника ${tech}% · завитки ${RAIL.curls}`; }
   }
   cursor = trackAt(RAIL.s); rawGame = null; offLine = false;
 }
 let finishAt=0, armedAt=0, lastTipAt=0;
+// live coach: looks at the last ~1.2 s of play and says the one most useful thing
+const LH={t:0, sp:0, q:0, mv:0, cur:"Веди язык по стрелке", at:0};
+function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(now-LH.t)/1000):0; LH.t=now; const a=1-Math.exp(-dt/1.2);
+  const sp=Math.min(3,Math.hypot(RAIL.vel[0],RAIL.vel[1])); const t=RAIL.dir||[1,0]; const q = sp>1e-6 ? (RAIL.vel[0]*t[0]+RAIL.vel[1]*t[1])/sp : 0;
+  LH.sp+=(sp-LH.sp)*a; LH.mv+=((RAIL.moving?1:0)-LH.mv)*a; if(RAIL.moving) LH.q+=(q-LH.q)*a;
+  if(!playing) return tip ? "Веди язык по стрелке" : "Покажи кончик языка";
+  let h = !tip ? "Покажи кончик языка — я тебя потерял"
+    : LH.mv<0.35 ? "Не замирай — веди дальше, сад ждёт"
+    : LH.sp>2.3 ? "Медленнее — сад не любит спешки"
+    : LH.q<0.2 ? "Не туда — следуй за стрелкой"
+    : LH.q<0.55 ? "Ближе к линии: смотри, куда показывает стрелка"
+    : LH.sp<0.6 ? "Смелее — чуть шире и увереннее"
+    : "Отлично, ровный ритм — так держать";
+  if(h!==LH.cur && now-LH.at>900){ LH.cur=h; LH.at=now; }
+  return LH.cur; }
 function drawFinish(){
   if(!finished) return;
   const W=game.width, t=Math.min(1,(performance.now()-finishAt)/400);
@@ -555,7 +615,7 @@ function drawRailHints(){
   gctx.beginPath(); gctx.moveTo(L,0); gctx.lineTo(L-16,-12); gctx.lineTo(L-16,-5); gctx.lineTo(18,-5); gctx.lineTo(18,5); gctx.lineTo(L-16,5); gctx.lineTo(L-16,12); gctx.closePath(); gctx.fill();
   gctx.restore();
   gctx.fillStyle="#1C2B4D"; gctx.font="bold 16px system-ui"; gctx.textAlign="center";
-  gctx.fillText(RAIL.waiting ? "Держи язык ровно в удобном положении — старт…" : !tip ? "Покажи язык" : RAIL.ok ? "Отлично, веди дальше" : RAIL.moving ? "Двигай по стрелке" : "Веди язык по стрелке", game.width/2, game.height-18);
+  gctx.fillText(liveHint(), game.width/2, game.height-18);
 }
 
 // checkpoints: the track is split into steps; each one magnetises the cursor and re-centres you
@@ -704,7 +764,7 @@ async function start(){
     view.width = video.videoWidth; view.height = video.videoHeight;
     document.body.classList.add('cam-on'); setTimeout(()=>window.scrollTo(0,0),50);
     if(video.requestVideoFrameCallback){ hasVFC=true; const vf=()=>{ vfNew=true; video.requestVideoFrameCallback(vf); }; video.requestVideoFrameCallback(vf); }
-    running = true; $("rangeBtn").disabled=false; $("recBtn").disabled=false; $("dsRec").disabled=false; $("playBtn").disabled=false;
+    running = true; if(!playing && !armed && !finished) showTipCard("pre"); $("rangeBtn").disabled=false; $("recBtn").disabled=false; $("dsRec").disabled=false; $("playBtn").disabled=false;
     $("status").textContent="Камера работает. Открой рот и подвигай кончиком языка — калибровка цвета не нужна.";
     requestAnimationFrame(loop);
   }catch(e){
@@ -763,7 +823,7 @@ function loop(){
 }
 
 $("startBtn").onclick = start;
-nnLoad(); $("playMode").value="rail";
+nnLoad(); $("playMode").value="rail"; showTipCard("pre");
 
 // ---------- debug recorder: 15 s of per-frame data + a contact sheet of camera/mask frames ----------
 let rec = null;
@@ -780,9 +840,9 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
-  if(now - rec.lastShot > 250 && rec.shots.length < 60){
+  if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
     const c = document.createElement("canvas"); c.width = 320; c.height = 160; const x = c.getContext("2d");
     // mouth crop from the view canvas (already has mask + tip drawn)
@@ -794,10 +854,10 @@ function recordFrame(now){
     x.fillStyle="#000"; x.fillRect(0,0,52,14); x.fillStyle="#fff"; x.font="10px monospace"; x.fillText((t/1000).toFixed(2)+"s",3,10);
     rec.shots.push(c);
   }
-  if(t > 15000) finishRec();
+  if(t > 60000 || (t > 30000 && !playing && !armed)) finishRec();
 }
 function finishRec(){
-  const r = rec; rec = null; $("recBtn").textContent = "● Записать лог (15 сек)";
+  const r = rec; rec = null; $("recBtn").textContent = "● Записать лог (30 сек, до финиша)";
   const cols = 6, rows = Math.ceil(r.shots.length/cols);
   const sheet = document.createElement("canvas"); sheet.width = cols*320; sheet.height = rows*160;
   const sx = sheet.getContext("2d"); sx.fillStyle="#222"; sx.fillRect(0,0,sheet.width,sheet.height);
@@ -836,7 +896,7 @@ const POSES = [
 ];
 const POSE_NAMES = Object.fromEntries(POSES.map(p=>[p.id,p.n]));
 const GUIDE = { on:false, k:0, t0:0, poses:POSES, capturing:false, PREP:1500, CAP:3000 };
-$("guideBtn").onclick = () => { if(!running) return; GUIDE.on=true; GUIDE.k=0; GUIDE.t0=performance.now(); $("guideBtn").disabled=true; };
+$("guideBtn").onclick = () => { if(!running) return; hideTipCard(); GUIDE.on=true; GUIDE.k=0; GUIDE.t0=performance.now(); $("guideBtn").disabled=true; };
 function guideTick(now){
   if(!GUIDE.on) return;
   const el = now - GUIDE.t0;
