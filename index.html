@@ -180,7 +180,7 @@ let tongueModel = null;     // {cr, cb, sd} from calibration
 let lastR, statsAt = 0, hasVFC = false, vfNew = true, tapHold = 0;
 document.addEventListener('pointerdown', ()=>{ tapHold = performance.now()+150; }, {capture:true, passive:true});
 // touch: fire the button right on finger-up instead of waiting for Safari's late click
-document.addEventListener('pointerup', e=>{ if(e.pointerType!=='touch') return; const b=e.target.closest && e.target.closest('button'); if(!b || b.disabled) return; b.__fast=performance.now(); b.click(); }, {capture:true});
+document.addEventListener('pointerup', e=>{ if(e.pointerType!=='touch') return; const b=e.target.closest && e.target.closest('button'); if(!b || b.disabled || b.id==='startBtn') return; b.__fast=performance.now(); b.click(); }, {capture:true});
 document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('button'); if(b && e.isTrusted && b.__fast && performance.now()-b.__fast<800){ e.stopImmediatePropagation(); e.preventDefault(); b.__fast=0; } }, {capture:true});
 let tip = null, tipRaw = null, tongueArea = 0, fps = 0, lastFrame = performance.now();
 
