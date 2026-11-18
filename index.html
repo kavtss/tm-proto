@@ -38,6 +38,7 @@
   #hud .h-task{background:#E6D6BC;border:3px solid var(--navy);border-radius:12px;padding:4px 10px;display:flex;flex-direction:column;justify-content:center;white-space:nowrap;min-width:112px}
   #hud .h-task span{font-size:12px;font-weight:800}
   #hud .h-task b{font-size:15px;font-weight:900}
+  #hud .h-task.next{background:var(--gold);animation:pulse .45s ease-in-out infinite alternate}
   #hud .h-task.on{background:var(--mag);color:#fff;animation:pulse .9s ease-in-out infinite alternate}
   @keyframes pulse{to{transform:scale(1.05)}}
   #hud .h-gs{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;background:var(--cream);border:3px solid var(--navy);border-radius:12px;padding:5px 8px}
@@ -391,7 +392,7 @@ function showTipCard(kind, res){
   if(kind==="pre"){
     $("tcKicker").textContent="ПЕРЕД ТРАССОЙ"; $("tcTitle").textContent=name; $("tcHead").textContent="СОВЕТ ТРЕНЕРА";
     $("tcText").textContent=COACH[id]||COACH._n;
-    $("tcMeta").textContent=`${LAPS_BY_RANK[rank]} кругов: `+LAP_PLAN[rank].map(k=>TASKS[k].icon? TASKS[k].icon+' '+TASKS[k].name : TASKS[k].name).join(' → ')+`. Первый круг — в своём темпе, по нему меряю «медленно» и «быстро». Над полем: зелёная зона — что нужно сейчас, розовая черта — что делаешь ты.`;
+    $("tcMeta").textContent=`${LAPS_BY_RANK[rank]} кругов: `+LAP_PLAN[rank].map(k=>TASKS[k].icon? TASKS[k].icon+' '+TASKS[k].name : TASKS[k].name).join(' → ')+`. Первый круг — в своём темпе. На кругах 🐢 и ⚡ по линии бежит метка с нужной скоростью — держись рядом с ней. Новое задание подсвечивается жёлтым заранее.`;
     $("tcGarden").textContent="🌷 Совет из сада: "+pickGarden(rank); $("tcGo").textContent= running ? "К ТРАССЕ" : "СНАЧАЛА ВКЛЮЧИ КАМЕРУ";
   } else {
     const {tech,curls,stars}=res;
@@ -491,6 +492,9 @@ function drawGame(){
   const tgtP = (playing && !finished) ? track[cpAt(Math.min(CP_N,cpIdx+1))] : null;
   if(tgtP){ const t=toGame(tgtP);
     gctx.strokeStyle="#F2B632"; gctx.lineWidth=5; gctx.beginPath(); gctx.arc(...t,18,0,7); gctx.stroke(); }
+  { const pu=pacerU(); if(pu!=null){ const task=lapTask(), idx=railRev()? track.length-1-pu : pu, q=toGame(trackAt(idx));
+      gctx.fillStyle="rgba(242,182,50,.35)"; gctx.beginPath(); gctx.arc(...q,22,0,7); gctx.fill(); gctx.strokeStyle="#F2B632"; gctx.lineWidth=4; gctx.beginPath(); gctx.arc(...q,22,0,7); gctx.stroke();
+      gctx.font="26px system-ui"; gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.fillText(task.icon,q[0],q[1]+1); gctx.textBaseline="alphabetic"; } }
   // raw tongue position (ghost) + magnetised cursor
   if(cursor){
     if(rawGame){ const r=toGame(rawGame); gctx.fillStyle="rgba(28,43,77,.25)"; gctx.beginPath(); gctx.arc(...r,8,0,7); gctx.fill(); }
@@ -535,7 +539,7 @@ function autoRange(p, now){
 function stepRail(now){
   // Rails v3: the tongue's MOVEMENT drives the cursor. Push the tongue the way the line goes and the cursor
   // travels along the line at the same speed; stop and it stops. No need to reach absolute positions.
-  const dt = RAIL.last ? Math.min(0.1,(now-RAIL.last)/1000) : 0; RAIL.last = now;
+  const dt = RAIL.last ? Math.min(0.1,(now-RAIL.last)/1000) : 0; RAIL.last = now; RAIL.now = now;
   // ---- Technique mode: a round is several laps of the same shape. The cursor glides with the tongue's own
   // speed; moving the right way keeps full pace, the wrong way slows it down (never a hard stop). Score =
   // how well the DIRECTION of movement follows the line + whether the curls were made in the right zones.
@@ -547,7 +551,7 @@ function stepRail(now){
     if(left>0){ RAIL.waiting=true; return; }
     if(window.FX) FX.start(rank); RAIL.waiting=false; playing=true; armed=false;
     const L1_=track.length-1; RAIL.open = Math.hypot(track[0][0]-track[L1_][0], track[0][1]-track[L1_][1]) > 0.2;
-    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0}); Object.assign(RAIL,{segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
+    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:now, lap0T:0}); Object.assign(RAIL,{segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
     cpIdx=0;
   }
   const rev = () => RAIL.open && (RAIL.lap||0)%2===1;
@@ -588,7 +592,7 @@ function stepRail(now){
     while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
       if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
       RAIL.s=posOf(RAIL.u);
-      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1 && TEMPO.pN>1) TEMPO.pace=Math.max(0.7,Math.min(2.6,TEMPO.pS/TEMPO.pN)); RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS,lapTask()); if(RAIL.lap>=LAPS){ adv=0; break; } } }
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1) TEMPO.lap0T=now-TEMPO.lapT0; TEMPO.lapT0=now; if(RAIL.lap===1 && TEMPO.pN>1) TEMPO.pace=Math.max(0.7,Math.min(2.6,TEMPO.pS/TEMPO.pN)); RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS,lapTask()); if(RAIL.lap>=LAPS){ adv=0; break; } } }
     // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
     if(tip && RAIL.prev && !RAIL.wrapped){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
       for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
@@ -621,7 +625,7 @@ function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(n
   const task=lapTask(), v=TEMPO.v/TEMPO.pace, ok=task!==TASKS.norm ? taskOkNow(task) : 1;
   let h = !tip ? "Покажи кончик языка — я тебя потерял"
     : LH.mv<0.35 ? "Не замирай — веди дальше, сад ждёт"
-    : ok===0 ? (task.shape ? task.hint : v>task.band[1] ? "Медленнее — тяни каждый мазок" : "Быстрее — живой, бодрый ритм")
+    : ok===0 ? (task.shape ? task.hint : pacerGap()!=null ? (task.pace<1 ? "Ты обгоняешь 🐢 — медленнее, держись рядом с ней" : "Догоняй ⚡ — быстрее!") : v>task.band[1] ? "Медленнее — тяни каждый мазок" : "Быстрее — живой, бодрый ритм")
     : task===TASKS.norm && v>task.band[1] && (RAIL.lap||0)>0 ? "Медленнее — сад не любит спешки"
     : LH.q<0.2 ? "Не туда — следуй за стрелкой"
     : LH.q<0.55 ? "Ближе к линии: смотри, куда показывает стрелка"
@@ -642,11 +646,15 @@ function setBar(band,needle,lo,hi,val,ok){ band.style.left=(lo*100)+'%'; band.st
   needle.style.display = val==null ? 'none' : ''; if(val!=null) needle.style.left=(Math.max(0,Math.min(1,val))*100)+'%'; }
 function updateHud(){ const n=LAPS_BY_RANK[curRank()], task= playing||finished ? lapTask() : TASKS.norm;
   $("hLap").textContent = playing ? `Круг ${Math.min(RAIL.lap+1,n)}/${n}` : finished ? "Финиш" : `${n} кругов`;
-  const on = playing && task!==TASKS.norm; $("hTask").classList.toggle('on',on); $("hTaskT").textContent = on ? `${task.icon} ${task.t}` : "свой темп";
+  const nx=playing? nextTask() : null, soon = nx && nx!==task && nx!==TASKS.norm && (RAIL.u||0) > 0.6*(track.length-1);
+  const on = playing && task!==TASKS.norm && !soon; $("hTask").classList.toggle('on',on); $("hTask").classList.toggle('next',!!soon);
+  $("hTaskT").textContent = soon ? `дальше: ${nx.icon} ${nx.t}` : on ? `${task.icon} ${task.t}` : "свой темп";
   // tempo relative to your own pace (lap 1); green = what this lap asks for
   const MAXR=2.2, v=TEMPO.v/TEMPO.pace, b=task.band, tok=v>=b[0]&&v<=b[1], moving=playing&&RAIL.moving;
   setBar($("hTempoBand"),$("hTempoNeedle"), b[0]/MAXR, Math.min(1,b[1]/MAXR), playing? v/MAXR : null, tok&&moving);
-  const tt=$("hTempoTxt"); tt.textContent = !playing ? "—" : !moving ? "стоишь" : tok ? "✓ в зоне" : v<b[0] ? "быстрее!" : "медленнее!"; tt.className = !playing||!moving ? '' : tok ? 'ok' : 'bad';
+  const gap=pacerGap(), tt=$("hTempoTxt");
+  if(gap!=null){ const ok = task.pace<1 ? gap<0.08 : gap>-0.08; tt.textContent = ok ? `✓ с ${task.icon}` : task.pace<1 ? `обгоняешь ${task.icon}` : `догоняй ${task.icon}`; tt.className= ok?'ok':'bad'; }
+  else { tt.textContent = !playing ? "—" : !moving ? "стоишь" : tok ? "✓ в зоне" : v<b[0] ? "быстрее!" : "медленнее!"; tt.className = !playing||!moving ? '' : tok ? 'ok' : 'bad'; }
   // tongue shape: wide & soft = relaxed, narrow & pointed = tense (relative to your own range)
   const r=(SHAPE.at && performance.now()-SHAPE.at<400) ? SHAPE.r : null, wide=task.shape==='wide', narrow=task.shape==='narrow';
   const sok = r!=null && (wide? r>0.55 : narrow? r<0.45 : true);
@@ -673,16 +681,23 @@ const CP_N = 10; let cps=[], cpIdx=0, cpFlash=0;
 // tempo is measured against YOUR own pace from the first lap, so "slow" and "fast" mean slower/faster than you usually go
 const TASKS={
   norm:{name:"обычный", icon:"", band:[0.55,1.6]},
-  slow:{name:"медленно", icon:"🐢", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
-  fast:{name:"быстрее", icon:"⚡", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
+  slow:{name:"медленно", icon:"🐢", pace:0.6, t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
+  fast:{name:"быстрее", icon:"⚡", pace:1.5, t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
   soft:{name:"мягкий язык", icon:"🍦", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
   hard:{name:"острый язык", icon:"🎯", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
 const LAP_PLAN=[["norm","norm","slow","norm","fast"],["norm","slow","norm","fast","norm"],["norm","slow","fast","soft","norm","norm"],
   ["norm","slow","soft","fast","hard","norm"],["norm","soft","slow","hard","fast","soft","norm"],["norm","slow","hard","fast","soft","slow","hard","fast"]];
-const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0};
+const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:0, lap0T:0};
+// pacer: on 🐢 / ⚡ laps a marker runs along the line at the asked speed (your 1st lap time ÷ 0.6 or ÷ 1.5) — stay with it
+function pacerU(){ const task=lapTask(); if(!playing || !task.pace || !(TEMPO.lap0T>0)) return null;
+  const dur=TEMPO.lap0T/task.pace, L1=track.length-1; return Math.min(L1, Math.max(0,(RAIL.now-TEMPO.lapT0)/dur*L1)); }
+function pacerGap(){ const pu=pacerU(); return pu==null ? null : ((RAIL.u||0)-pu)/(track.length-1); }   // >0 ahead of the pacer, <0 behind
+function nextTask(){ const plan=LAP_PLAN[curRank()], k=(RAIL.lap||0)+1; return k<plan.length ? TASKS[plan[k]] : null; }
 function curRank(){ return TRACK_RANK[$("trackSel").value] ?? 0; }
 function lapTask(){ const plan=LAP_PLAN[curRank()]; return TASKS[plan[Math.min(plan.length-1, RAIL.lap||0)]]; }
-function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape not visible)
+function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape not visible / first 0.8 s of the lap to switch)
+  if(RAIL.now - TEMPO.lapT0 < 800) return null;
+  const g=pacerGap(); if(g!=null) return (task.pace<1 ? g<0.08 : g>-0.08) ? 1 : 0;
   const v=TEMPO.v/TEMPO.pace, tempoOk = v>=task.band[0] && v<=task.band[1];
   if(task.shape){ if(!SHAPE.at || performance.now()-SHAPE.at>400 || SHAPE.r==null) return null;
     return (task.shape==="wide" ? SHAPE.r>0.55 : SHAPE.r<0.45) ? 1 : 0; }
@@ -925,7 +940,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, gap: pacerGap()==null? null : Math.round(pacerGap()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
