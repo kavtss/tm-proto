@@ -560,16 +560,16 @@ function stepRail(now){
   if(armed && !playing){
     const cal = CAL.need, el=(now-armedAt)/1000, CA=1.8, CB=1.8, total = cal ? CA+CB+2 : 3;
     if(cal){ CAL.phase = el<CA ? 'wide' : el<CA+CB ? 'narrow' : null;
-      const fresh = SHAPE.at && performance.now()-SHAPE.at<200 && SHAPE.w!=null;
-      if(fresh && CAL.phase==='wide' && el>CA-1.1) CAL.a.push(SHAPE.w);
-      if(fresh && CAL.phase==='narrow' && el>CA+CB-1.1) CAL.b.push(SHAPE.w);
+      const fresh = SHAPE.at && performance.now()-SHAPE.at<500 && SHAPE.w!=null; CAL.age = SHAPE.at ? Math.round(performance.now()-SHAPE.at) : -1;
+      if(fresh && CAL.phase==='wide' && el>0.6) CAL.a.push(SHAPE.w);
+      if(fresh && CAL.phase==='narrow' && el>CA+0.6) CAL.b.push(SHAPE.w);
       if(CAL.phase!==CAL.said){ CAL.said=CAL.phase; if(CAL.phase==='wide') say('покажи мягкий, широкий язык',{force:true}); else if(CAL.phase==='narrow') say('а теперь узкий и острый',{force:true}); else calFinish(); } }
     const left = total - el;                                          // (calibration), then 2-1 / 3-2-1, then the start waits for YOUR first move
     RAIL.count = Math.max(0,left); cursor = trackAt(0);
     if(left>0){ RAIL.waiting=true; return; }
     RAIL.waiting=false; playing=true; armed=false;
     const L1_=track.length-1; RAIL.open = Math.hypot(track[0][0]-track[L1_][0], track[0][1]-track[L1_][1]) > 0.2;
-    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, lS:0, lN:0, lead0:0.72*NORM_V, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:now, lap0T:0}); Object.assign(RAIL,{go:false, goT:0, segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
+    Object.assign(TEMPO,{wS:[], wN:null, v:0, pace:1.3, pS:0, pN:0, lS:0, lN:0, lead0:0.72*NORM_V, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:now, lap0T:0}); Object.assign(RAIL,{go:false, goT:0, segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
     cpIdx=0;
   }
   const rev = () => RAIL.open && (RAIL.lap||0)%2===1;
@@ -596,6 +596,7 @@ function stepRail(now){
   if(playing && !finished){
     TEMPO.v += ((RAIL.moving?speed:0)-TEMPO.v)*(1-Math.exp(-dt/0.35));
     if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt;
+      if((RAIL.lap||0)===0 && SHAPE.at && performance.now()-SHAPE.at<400 && SHAPE.w!=null){ (TEMPO.wS=TEMPO.wS||[]).push(SHAPE.w); }
       if((RAIL.lap||0)===0){ TEMPO.pS+=speed*dt; TEMPO.pN+=dt; TEMPO.lS+=leadSpeed()*dt; TEMPO.lN+=dt; }
       const task=lapTask(); let tk=1;
       if(task!==TASKS.norm){ const o=taskOkNow(task); shapeVoice(task,o,dt); if(o!==null){ tk=o; RAIL.segTk+=o*dt; RAIL.segTn+=dt;
@@ -615,7 +616,7 @@ function stepRail(now){
     while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
       if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
       RAIL.s=posOf(RAIL.u);
-      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1) TEMPO.lap0T=now-TEMPO.lapT0; TEMPO.lapT0=now; if(RAIL.lap===1 && TEMPO.pN>1){ TEMPO.pace=Math.max(0.4,Math.min(2.6,TEMPO.pS/TEMPO.pN)); TEMPO.lead0=TEMPO.lS/Math.max(1e-6,TEMPO.lN); } RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS){ const tk=lapTask(); if(tk!==TASKS.norm) lapBanner(tk); FX.lap && FX.lap(RAIL.lap+1,LAPS,tk); FX.tempo && FX.tempo(tk.pace||1); } if(RAIL.lap>=LAPS){ adv=0; break; } } }
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1) TEMPO.lap0T=now-TEMPO.lapT0; TEMPO.lapT0=now; if(RAIL.lap===1 && TEMPO.pN>1){ TEMPO.pace=Math.max(0.4,Math.min(2.6,TEMPO.pS/TEMPO.pN)); TEMPO.lead0=TEMPO.lS/Math.max(1e-6,TEMPO.lN); TEMPO.wN = (TEMPO.wS&&TEMPO.wS.length>8) ? med(TEMPO.wS) : null; } RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS){ const tk=lapTask(); if(tk!==TASKS.norm) lapBanner(tk); FX.lap && FX.lap(RAIL.lap+1,LAPS,tk); FX.tempo && FX.tempo(tk.pace||1); } if(RAIL.lap>=LAPS){ adv=0; break; } } }
     // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
     if(tip && RAIL.prev && !RAIL.wrapped && !leadOn()){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
       for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
@@ -682,9 +683,9 @@ function updateHud(){ const n=LAPS_BY_RANK[curRank()], task= playing||finished ?
   else { tt.textContent = !playing ? "—" : !moving ? "стоишь" : tok ? "✓ в зоне" : v<b[0] ? "быстрее!" : "медленнее!"; tt.className = !playing||!moving ? '' : tok ? 'ok' : 'bad'; }
   // tongue shape: wide & soft = relaxed, narrow & pointed = tense (relative to your own range)
   const r=(SHAPE.at && performance.now()-SHAPE.at<400) ? SHAPE.r : null, wide=task.shape==='wide', narrow=task.shape==='narrow';
-  const sok = r!=null && (wide? r>0.55 : narrow? r<0.45 : true);
+  const sok = task.shape ? taskOkNow(task)===1 : true;
   setBar($("hShapeBand"),$("hShapeNeedle"), wide?0.55:0, narrow?0.45:1, r, task.shape? sok : false);
-  const st=$("hShapeTxt"); st.textContent = (task.shape && !SHAPE.cal) ? "не различаю" : r==null ? "не вижу" : task.shape ? (sok?"✓ в зоне":wide?"расслабь!":"напряги!") : (r>0.7?"мягкий":r<0.35?"острый":"средний");
+  const st=$("hShapeTxt"); st.textContent = (task.shape && !SHAPE.cal && !TEMPO.wN) ? "не различаю" : r==null ? "не вижу" : task.shape ? (sok?"✓ в зоне":wide?"расслабь!":"напряги!") : (r>0.7?"мягкий":r<0.35?"острый":"средний");
   st.className = task.shape && r!=null ? (sok?'ok':'bad') : ''; }
 function drawRailHints(){
   updateHud(); drawFinish(); if(finished){ if(window.FX&&FX.tempo) FX.tempo(1); return; }
@@ -717,7 +718,7 @@ const TASKS={
   norm:{name:"обычный", icon:"", band:[0.55,1.6]},
   warm:{name:"разминка, медленно", icon:"🌱", lead:true, warm:true, say:"начнём медленно…", col:"#2E9E6B", sub:"начинаем медленно — веди язык за точкой", t:"РАЗМИНКА", band:[0.2,1.8]},
   slow:{name:"медленно, точка ведёт", icon:"🐢", lead:true, pace:0.65, say:"медленно…", col:"#2F6FB8", sub:"притормози язык — веди вместе с точкой", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
-  fast:{name:"быстрее, точка ведёт", icon:"⚡", lead:true, pace:1.1, say:"быстрее!", col:"#E0662A", sub:"ускорь язык — не отставай от точки", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
+  fast:{name:"быстрее, точка ведёт", icon:"⚡", lead:true, pace:1.0, say:"быстрее!", col:"#E0662A", sub:"ускорь язык — не отставай от точки", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
   soft:{name:"мягкий язык", icon:"🍦", say:"расслабь язык", col:"#2BB3A3", sub:"мягкий широкий язык, как для мороженого", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
   hard:{name:"острый язык", icon:"🎯", say:"напряги язык", col:"#C2306F", sub:"узкий напряжённый язык, работает кончик", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
 const LAP_PLAN=[["warm","norm","slow","norm","fast"],["warm","slow","norm","fast","norm"],["warm","slow","fast","soft","norm","norm"],
@@ -779,8 +780,10 @@ function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape n
   if(task.warm || RAIL.now - TEMPO.lapT0 < 800) return null;
   if(task.pace && leadOn()){ const r=leadRatio(); return (r>(task.pace>1?0.65:0.7) && r<1.45 && (RAIL.qfS||0)>0.45) ? 1 : 0; }
   const v=TEMPO.v/TEMPO.pace, tempoOk = v>=task.band[0] && v<=task.band[1];
-  if(task.shape){ if(!SHAPE.cal || !SHAPE.at || performance.now()-SHAPE.at>400 || SHAPE.r==null) return null;
-    return (task.shape==="wide" ? SHAPE.r>0.55 : SHAPE.r<0.45) ? 1 : 0; }
+  if(task.shape){ if(!SHAPE.at || performance.now()-SHAPE.at>400 || SHAPE.r==null) return null;
+    if(SHAPE.cal) return (task.shape==="wide" ? SHAPE.r>0.55 : SHAPE.r<0.45) ? 1 : 0;
+    if(TEMPO.wN) return (task.shape==="wide" ? SHAPE.w>TEMPO.wN*1.08 : SHAPE.w<TEMPO.wN*0.92) ? 1 : 0;   // no calibration: compare with your warm-up lap
+    return null; }
   return tempoOk?1:0; }
 // on-track judgement of every segment: ТОЧНО / ХОРОШО / ПОЧТИ / МИМО (+ ЗАВИТОК), the passed line keeps its colour
 const GRADE=[{min:0.85,t:"ТОЧНО!",c:"#F2B632"},{min:0.65,t:"ХОРОШО",c:"#2E9E6B"},{min:0.4,t:"ПОЧТИ",c:"#E8833A"},{min:-1,t:"МИМО",c:"#7D8DB3"}];
@@ -1022,7 +1025,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', go: !!RAIL.go, cal: CAL.res, cue: leadOn()? CUE.st : null, tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, lead: leadRatio()==null? null : Math.round(leadRatio()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', go: !!RAIL.go, cal: CAL.res, calPh: CAL.phase, calN: [CAL.a.length, CAL.b.length], shAge: SHAPE.at? Math.round(performance.now()-SHAPE.at) : null, shW: SHAPE.w==null? null : Math.round(SHAPE.w*1000)/1000, wN: TEMPO.wN? Math.round(TEMPO.wN*1000)/1000 : null, cue: leadOn()? CUE.st : null, tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, lead: leadRatio()==null? null : Math.round(leadRatio()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
