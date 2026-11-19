@@ -462,7 +462,7 @@ function railRev(){ return $("playMode").value==="rail" && RAIL.open && (RAIL.la
 function cpAt(k){ return railRev()? track.length-1-cps[k] : cps[k]; }
 function drawGame(){
   if(GUIDE.on){ drawGuide(); return; }
-  const W=game.width; gctx.fillStyle="#FBF1E1"; gctx.fillRect(0,0,W,W);
+  const W=game.width; gctx.fillStyle = (typeof leadOn==="function" && leadOn()) ? (lapTask().pace<1 ? "#DCEAF8" : "#FFE2C6") : "#FBF1E1"; gctx.fillRect(0,0,W,W);
   gctx.lineCap="round"; gctx.lineJoin="round";
   // remaining path
   gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=4; gctx.setLineDash([]);
@@ -608,7 +608,7 @@ function stepRail(now){
     while(adv>0){ const k=Math.min(L1-1,Math.floor(RAIL.u)), j=rev()? L1-1-k : k, seg=(cum[j+1]-cum[j])||1e-6, left=(1-(RAIL.u-k))*seg;
       if(adv<left){ RAIL.u+=adv/seg; adv=0; } else { RAIL.u=k+1; adv-=left; }
       RAIL.s=posOf(RAIL.u);
-      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1) TEMPO.lap0T=now-TEMPO.lapT0; TEMPO.lapT0=now; if(RAIL.lap===1 && TEMPO.pN>1) TEMPO.pace=Math.max(0.7,Math.min(2.6,TEMPO.pS/TEMPO.pN)); RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS) FX.lap && FX.lap(RAIL.lap+1,LAPS,lapTask()); if(RAIL.lap>=LAPS){ adv=0; break; } } }
+      if(RAIL.u>=L1){ RAIL.u=0; RAIL.lap++; RAIL.wrapped=true; JUDG.seg=[]; JUDG.lap=RAIL.lap; if(RAIL.lap===1) TEMPO.lap0T=now-TEMPO.lapT0; TEMPO.lapT0=now; if(RAIL.lap===1 && TEMPO.pN>1) TEMPO.pace=Math.max(0.7,Math.min(2.6,TEMPO.pS/TEMPO.pN)); RAIL.s=posOf(0); cpIdx=0; if(window.FX && RAIL.lap<LAPS){ const tk=lapTask(); if(tk!==TASKS.norm) lapBanner(tk); FX.lap && FX.lap(RAIL.lap+1,LAPS,tk); FX.tempo && FX.tempo(tk.pace||1); } if(RAIL.lap>=LAPS){ adv=0; break; } } }
     // phase lock: if the tongue is clearly at a nearby place of the shape, let the cursor drift there softly
     if(tip && RAIL.prev && !RAIL.wrapped && !leadOn()){ const w=Math.max(4,Math.round(L1*0.18)); let bu=-1, bd=1e9;
       for(let uu=Math.max(0,Math.floor(RAIL.u)-w); uu<=Math.min(L1,Math.ceil(RAIL.u)+w); uu++){ const q=track[posOf(uu)]; const d=Math.hypot(q[0]-RAIL.prev[0],q[1]-RAIL.prev[1]); if(d<bd){ bd=d; bu=uu; } }
@@ -680,7 +680,7 @@ function updateHud(){ const n=LAPS_BY_RANK[curRank()], task= playing||finished ?
   const st=$("hShapeTxt"); st.textContent = r==null ? "не вижу" : task.shape ? (sok?"✓ в зоне":wide?"расслабь!":"напряги!") : (r>0.7?"мягкий":r<0.35?"острый":"средний");
   st.className = task.shape && r!=null ? (sok?'ok':'bad') : ''; }
 function drawRailHints(){
-  updateHud(); drawFinish(); if(finished) return;
+  updateHud(); drawFinish(); if(finished){ if(window.FX&&FX.tempo) FX.tempo(1); return; }
   if(armed && RAIL.count>0){ const W=game.width; gctx.fillStyle='rgba(28,43,77,.55)'; gctx.fillRect(0,0,W,W); gctx.fillStyle='#F2B632'; gctx.textAlign='center'; gctx.textBaseline='middle'; gctx.font='900 120px system-ui'; gctx.fillText(String(Math.ceil(RAIL.count)), W/2, W/2); gctx.textBaseline='alphabetic'; return; }
   if($("playMode").value!=="rail" || !cursor) return;
   const c=toGame(cursor), d=RAIL.dir, L=46;
@@ -703,10 +703,10 @@ const CP_N = 10; let cps=[], cpIdx=0, cpFlash=0;
 // tempo is measured against YOUR own pace from the first lap, so "slow" and "fast" mean slower/faster than you usually go
 const TASKS={
   norm:{name:"обычный", icon:"", band:[0.55,1.6]},
-  slow:{name:"медленно, точка ведёт", icon:"🐢", pace:0.6, t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
-  fast:{name:"быстро, точка ведёт", icon:"⚡", pace:1.5, t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
-  soft:{name:"мягкий язык", icon:"🍦", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
-  hard:{name:"острый язык", icon:"🎯", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
+  slow:{name:"медленно, точка ведёт", icon:"🐢", pace:0.6, col:"#2F6FB8", sub:"притормози язык — веди вместе с точкой", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
+  fast:{name:"быстро, точка ведёт", icon:"⚡", pace:1.5, col:"#E0662A", sub:"ускорь язык — не отставай от точки", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
+  soft:{name:"мягкий язык", icon:"🍦", col:"#2BB3A3", sub:"мягкий широкий язык, как для мороженого", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
+  hard:{name:"острый язык", icon:"🎯", col:"#C2306F", sub:"узкий напряжённый язык, работает кончик", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
 const LAP_PLAN=[["norm","norm","slow","norm","fast"],["norm","slow","norm","fast","norm"],["norm","slow","fast","soft","norm","norm"],
   ["norm","slow","soft","fast","hard","norm"],["norm","soft","slow","hard","fast","soft","norm"],["norm","slow","hard","fast","soft","slow","hard","fast"]];
 const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:0, lap0T:0};
@@ -716,6 +716,26 @@ function leadSpeed(){ const task=lapTask(), cum=trackCum(); return cum[cum.lengt
 function leadRatio(){ if(!leadOn()) return null; return (TEMPO.v/TEMPO.pace)/lapTask().pace; }  // your tongue speed (vs your own lap-1 speed) ÷ what the dot asks: 1 = in rhythm
 function pacerU(){ return null; }
 function pacerGap(){ return null; }
+const BANNER={t0:0, task:null};
+function lapBanner(task){ BANNER.t0=performance.now(); BANNER.task=task; }
+function drawBanner(){ const task=BANNER.task, a=(performance.now()-BANNER.t0)/1800; if(!task||a>1) return; const W=game.width;
+  const al = a<0.1 ? a/0.1 : a>0.8 ? (1-a)/0.2 : 1; gctx.save(); gctx.globalAlpha=al;
+  gctx.fillStyle="rgba(28,43,77,.72)"; gctx.fillRect(0,W*0.3,W,W*0.4);
+  gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.font="900 54px system-ui"; gctx.lineJoin="round"; gctx.lineWidth=8; gctx.strokeStyle="#1C2B4D";
+  const k=1+0.08*Math.max(0,1-a*6); gctx.translate(W/2,W*0.45); gctx.scale(k,k);
+  gctx.strokeText(`${task.icon} ${task.t}`,0,0); gctx.fillStyle=task.col||"#F2B632"; gctx.fillText(`${task.icon} ${task.t}`,0,0); gctx.setTransform(1,0,0,1,0,0);
+  gctx.font="700 17px system-ui"; gctx.fillStyle="#FBF1E1"; gctx.fillText(task.sub||"",W/2,W*0.59,W-24); gctx.restore(); gctx.textBaseline="alphabetic"; }
+// cue right at the dot you are watching: В РИТМЕ / МЕДЛЕННЕЕ / БЫСТРЕЕ (with a little hysteresis)
+const CUE={st:'ok', at:0};
+function drawDotCue(c){ if(!leadOn() || RAIL.now-TEMPO.lapT0<800) return; const r=leadRatio(), now=performance.now();
+  let st = !RAIL.moving ? 'go' : r>1.45 ? 'slow' : r<0.7 ? 'fast' : (r>0.8 && r<1.3) ? 'ok' : CUE.st;
+  if(st!==CUE.st && now-CUE.at>500){ CUE.st=st; CUE.at=now; }
+  const L={ok:["✓ В РИТМЕ","#2E9E6B"], slow:["🐢 МЕДЛЕННЕЕ","#2F6FB8"], fast:["⚡ БЫСТРЕЕ","#E0662A"], go:["ВЕДИ ЗА ТОЧКОЙ","#C2306F"]}[CUE.st];
+  const W=game.width, y = c[1] > W-90 ? c[1]-58 : c[1]+58, pulse = CUE.st==='ok' ? 1 : 1+0.07*Math.sin(now/90);
+  gctx.save(); gctx.translate(Math.max(95,Math.min(W-95,c[0])), y); gctx.scale(pulse,pulse);
+  gctx.font="900 22px system-ui"; const tw=gctx.measureText(L[0]).width+26; gctx.fillStyle=L[1]; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=3;
+  gctx.beginPath(); gctx.roundRect(-tw/2,-18,tw,36,18); gctx.fill(); gctx.stroke();
+  gctx.fillStyle="#fff"; gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.fillText(L[0],0,1); gctx.restore(); gctx.textBaseline="alphabetic"; }
 function nextTask(){ const plan=LAP_PLAN[curRank()], k=(RAIL.lap||0)+1; return k<plan.length ? TASKS[plan[k]] : null; }
 function curRank(){ return TRACK_RANK[$("trackSel").value] ?? 0; }
 function lapTask(){ const plan=LAP_PLAN[curRank()]; return TASKS[plan[Math.min(plan.length-1, RAIL.lap||0)]]; }
@@ -938,7 +958,7 @@ function loop(){
     } else { lose(now); dsTick(now, null); }
   } else lose(now);
   if(rangeSamples && now > rangeUntil) finishRange();
-  guideTick(now); if($("playMode").value==="rail") stepRail(now); else stepGame(); if(window.FX) FX.tick(now, !!tip); drawGame(); drawRailHints(); drawJudg(); if(window.FX) FX.draw(gctx, now); recordFrame(now);
+  guideTick(now); if($("playMode").value==="rail") stepRail(now); else stepGame(); if(window.FX) FX.tick(now, !!tip); drawGame(); drawRailHints(); drawJudg(); if($("playMode").value==="rail" && cursor && playing) drawDotCue(toGame(cursor)); drawBanner(); if(window.FX) FX.draw(gctx, now); recordFrame(now);
   if(now-statsAt>250){ statsAt=now; $("stats").textContent =
     `FPS ${fps.toFixed(0)}  лицо: ${lastLm?"да":"нет"}  язык: ${tip?"да":"нет"}\n`+
     `площадь языка (отн. рта): ${tongueArea.toFixed(2)}\n`+
@@ -965,7 +985,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', go: !!RAIL.go, tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, lead: leadRatio()==null? null : Math.round(leadRatio()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', go: !!RAIL.go, cue: leadOn()? CUE.st : null, tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, lead: leadRatio()==null? null : Math.round(leadRatio()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
@@ -1230,7 +1250,8 @@ const FX = (() => {
   return {
     busy(){ return !!sticker && performance.now()-sticker.t0<1400; },
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
-    lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`+(task&&task.t? ` · ${task.icon} ${task.t}` : ''); showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
+    tempo(r){ if(musicSrc&&ctx){ musicSrc.playbackRate.setTargetAtTime(r<1?0.82:r>1?1.18:1, ctx.currentTime, 0.25); } },
+    lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; if(!task||!task.t) showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
       if(curl){ play('stk_cleanline',{gain:.6}); vib([20,40,20]); }
       if(q>=0.4 && q<0.65){ play('hit_tochno',{rate:0.84,gain:.45}); vib([15]); return; }   // ПОЧТИ: soft tick, combo kept
