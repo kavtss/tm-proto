@@ -642,7 +642,7 @@ function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(n
   const task=lapTask(), v=TEMPO.v/TEMPO.pace, ok=task!==TASKS.norm ? taskOkNow(task) : 1;
   let h = !tip ? "Покажи кончик языка — я тебя потерял"
     : LH.mv<0.35 ? "Не замирай — веди дальше, сад ждёт"
-    : ok===0 ? (task.shape ? task.hint : leadOn() ? (leadRatio()>=1.6 ? "Точка ведёт медленно — не обгоняй её" : leadRatio()<=0.6 ? "Точка ведёт быстро — успевай за ней" : "Повторяй движение точки") : v>task.band[1] ? "Медленнее — тяни каждый мазок" : "Быстрее — живой, бодрый ритм")
+    : ok===0 ? (task.shape ? task.hint : leadOn() ? (leadRatio()>=1.45 ? "Точка ведёт медленно — не обгоняй её" : leadRatio()<=0.7 ? "Точка ведёт быстро — успевай за ней" : "Повторяй движение точки") : v>task.band[1] ? "Медленнее — тяни каждый мазок" : "Быстрее — живой, бодрый ритм")
     : task===TASKS.norm && v>task.band[1] && (RAIL.lap||0)>0 ? "Медленнее — сад не любит спешки"
     : LH.q<0.2 ? "Не туда — следуй за стрелкой"
     : LH.q<0.55 ? "Ближе к линии: смотри, куда показывает стрелка"
@@ -670,8 +670,8 @@ function updateHud(){ const n=LAPS_BY_RANK[curRank()], task= playing||finished ?
   const MAXR=2.2, v=TEMPO.v/TEMPO.pace, b=task.band, tok=v>=b[0]&&v<=b[1], moving=playing&&RAIL.moving;
   setBar($("hTempoBand"),$("hTempoNeedle"), b[0]/MAXR, Math.min(1,b[1]/MAXR), playing? v/MAXR : null, tok&&moving);
   const lr=leadRatio(), tt=$("hTempoTxt");
-  if(lr!=null){ setBar($("hTempoBand"),$("hTempoNeedle"), 0.6/2.2*1.0, 1.6/2.2, Math.min(1,lr/2.2), lr>0.6&&lr<1.6);
-    const ok=lr>0.6&&lr<1.6; tt.textContent = !moving ? "веди!" : ok ? "✓ в ритме" : lr>=1.6 ? "медленнее!" : "быстрее!"; tt.className= ok&&moving?'ok':'bad'; }
+  if(lr!=null){ setBar($("hTempoBand"),$("hTempoNeedle"), 0.7/2.2, 1.45/2.2, Math.min(1,lr/2.2), lr>0.7&&lr<1.45);
+    const ok=lr>0.7&&lr<1.45; tt.textContent = !moving ? "веди!" : ok ? "✓ в ритме" : lr>=1.45 ? "медленнее!" : "быстрее!"; tt.className= ok&&moving?'ok':'bad'; }
   else { tt.textContent = !playing ? "—" : !moving ? "стоишь" : tok ? "✓ в зоне" : v<b[0] ? "быстрее!" : "медленнее!"; tt.className = !playing||!moving ? '' : tok ? 'ok' : 'bad'; }
   // tongue shape: wide & soft = relaxed, narrow & pointed = tense (relative to your own range)
   const r=(SHAPE.at && performance.now()-SHAPE.at<400) ? SHAPE.r : null, wide=task.shape==='wide', narrow=task.shape==='narrow';
@@ -713,7 +713,7 @@ const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:
 // pacer: on 🐢 / ⚡ laps a marker runs along the line at the asked speed (your 1st lap time ÷ 0.6 or ÷ 1.5) — stay with it
 function leadOn(){ const task=lapTask(); return playing && RAIL.go && !!task.pace && TEMPO.lap0T>0; }
 function leadSpeed(){ const task=lapTask(), cum=trackCum(); return cum[cum.length-1]/(TEMPO.lap0T/1000/task.pace); }   // field units / s
-function leadRatio(){ if(!leadOn()) return null; const G=+$("gain").value*0.75; return (TEMPO.v*G)/Math.max(1e-6,leadSpeed()); }  // your tongue speed vs the dot
+function leadRatio(){ if(!leadOn()) return null; return (TEMPO.v/TEMPO.pace)/lapTask().pace; }  // your tongue speed (vs your own lap-1 speed) ÷ what the dot asks: 1 = in rhythm
 function pacerU(){ return null; }
 function pacerGap(){ return null; }
 function nextTask(){ const plan=LAP_PLAN[curRank()], k=(RAIL.lap||0)+1; return k<plan.length ? TASKS[plan[k]] : null; }
@@ -721,7 +721,7 @@ function curRank(){ return TRACK_RANK[$("trackSel").value] ?? 0; }
 function lapTask(){ const plan=LAP_PLAN[curRank()]; return TASKS[plan[Math.min(plan.length-1, RAIL.lap||0)]]; }
 function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape not visible / first 0.8 s of the lap to switch)
   if(RAIL.now - TEMPO.lapT0 < 800) return null;
-  if(task.pace && leadOn()){ const r=leadRatio(); return (r>0.6 && r<1.6 && (RAIL.qfS||0)>0.45) ? 1 : 0; }
+  if(task.pace && leadOn()){ const r=leadRatio(); return (r>0.7 && r<1.45 && (RAIL.qfS||0)>0.45) ? 1 : 0; }
   const v=TEMPO.v/TEMPO.pace, tempoOk = v>=task.band[0] && v<=task.band[1];
   if(task.shape){ if(!SHAPE.at || performance.now()-SHAPE.at>400 || SHAPE.r==null) return null;
     return (task.shape==="wide" ? SHAPE.r>0.55 : SHAPE.r<0.45) ? 1 : 0; }
