@@ -738,11 +738,19 @@ function pickVoice(){ if(!window.speechSynthesis) return null; const vs=speechSy
   const fem=/milena|katya|katia|alena|alyona|anna|irina|elena|svetlana|daria|dariya|tatyana|marina|female|жен/i, male=/yuri|maxim|pavel|dmitr|male/i;
   return vs.find(v=>fem.test(v.name)&&/enhanced|premium|улучш/i.test(v.name)) || vs.find(v=>fem.test(v.name)) || vs.find(v=>!male.test(v.name)) || vs[0]; }
 if(window.speechSynthesis){ const f=()=>{ VOICE.v=pickVoice(); const n=$("voiceName"); if(n) n.textContent = VOICE.v ? `(${VOICE.v.name})` : '(нет русского голоса)'; }; f(); speechSynthesis.onvoiceschanged=f; }
-function voiceUnlock(){ if(!window.speechSynthesis || VOICE.unlocked) return; const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); VOICE.unlocked=true; }
-function say(txt,{force=false,gap=2200}={}){ if(!window.speechSynthesis || !$("voiceOn").checked) return; const now=performance.now();
+function voiceUnlock(){ if(window.FX && FX.preloadVoice) FX.preloadVoice(); if(!window.speechSynthesis || VOICE.unlocked) return; const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); VOICE.unlocked=true; }
+// recorded phrases (ElevenLabs, voice "Masha"): vo_<key>.mp3 next to index.html; the system voice is only the fallback
+const VO={'начнём медленно…':'warm','медленно…':'slowlap','быстрее!':'faster','быстрее':'faster','медленнее':'slower','веди за точкой':'follow','да… вот так':'good',
+  'расслабь язык':'soft','напряги язык':'hard','мягче… шире':'softer','острее… кончиком':'sharper','покажи мягкий, широкий язык':'calwide','а теперь узкий и острый':'calnarrow',
+  'восхитительно':'fin3','хорошо… очень хорошо':'fin2','неплохо… ещё разок?':'fin1'};
+function say(txt,{force=false,gap=2200}={}){ if(!$("voiceOn").checked) return; const now=performance.now();
   if(!force && (now-VOICE.last<gap || (txt===VOICE.lastTxt && now-VOICE.last<4500))) return;
+  VOICE.last=now; VOICE.lastTxt=txt; const k=VO[txt];
+  if(k && window.FX && FX.voice){ FX.voice(k).then(ok=>{ if(!ok) speakTTS(txt); }); return; }
+  speakTTS(txt); }
+function speakTTS(txt){ if(!window.speechSynthesis) return;
   if(!VOICE.v) VOICE.v=pickVoice(); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(txt); u.lang='ru-RU'; if(VOICE.v) u.voice=VOICE.v;
-  u.rate=0.92; u.pitch=1.12; u.volume=1; speechSynthesis.speak(u); VOICE.last=now; VOICE.lastTxt=txt; if(window.FX && FX.duckFor) FX.duckFor(900); }
+  u.rate=0.92; u.pitch=1.12; u.volume=1; speechSynthesis.speak(u); if(window.FX && FX.duckFor) FX.duckFor(900); }
 // ---------- personal tongue-shape calibration: 1.8 s "wide & soft", 1.8 s "narrow & pointed" ----------
 const CAL={need:false, a:[], b:[], phase:null, said:null, res:null};
 function calStart(){ const plan=LAP_PLAN[curRank()]; Object.assign(CAL,{need: plan.includes('soft')||plan.includes('hard'), a:[], b:[], phase:null, said:null}); }
@@ -1291,6 +1299,10 @@ const FX = (() => {
     busy(){ return !!sticker && performance.now()-sticker.t0<1400; },
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
     duckFor(ms){ duck(0.12,ms); },
+    voice(k){ const c=ac(); if(!c) return Promise.resolve(false); let cur=null;
+      return load('vo_'+k).then(b=>{ if(!b) return false; try{ if(FX.__vo) FX.__vo.stop(); }catch(e){}
+        const s=c.createBufferSource(); s.buffer=b; const g=c.createGain(); g.gain.value=1.25; s.connect(g).connect(master); s.start(); FX.__vo=s; duck(0.12, Math.round(b.duration*1000)+300); return true; }); },
+    preloadVoice(){ ['warm','slowlap','faster','slower','follow','good','soft','hard','softer','sharper','calwide','calnarrow','fin3','fin2','fin1'].forEach(k=>load('vo_'+k)); },
     tempo(r){ if(musicSrc&&ctx){ musicSrc.playbackRate.setTargetAtTime(r<1?0.82:r>1?1.18:1, ctx.currentTime, 0.25); } },
     lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; if(!task||!task.t) showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
