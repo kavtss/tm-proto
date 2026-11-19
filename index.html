@@ -415,7 +415,7 @@ $("tcGo").onclick = () => { if(!running){ $("startBtn").scrollIntoView({block:"c
 let anchor=null;
 function resetRun(){ JUDG.seg=[]; JUDG.lap=-1; JUDG.pops=[]; RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
 // "Старт": run arms; it begins when the cursor reaches the start dot
-$("playBtn").onclick = () => { if(armed || !running) return; hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=1.5; $("score").textContent="Приготовься… язык в удобное положение"; };
+$("playBtn").onclick = () => { if(armed || !running) return; hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=3; $("score").textContent="Приготовься… язык в удобное положение"; };
 
 // ---------- personal range calibration: tongue circle → maps your reach onto the field ----------
 let range = { cx:0, cy:0, rx:0.9, ry:0.9 };   // defaults: the mouth opening fills the field
@@ -476,13 +476,23 @@ function drawGame(){
   } else if(pi>0 || railRev()){ gctx.strokeStyle="#C2306F"; gctx.lineWidth=14; gctx.shadowColor="#C2306F"; gctx.shadowBlur=12;
     gctx.beginPath(); (railRev()? track.slice(pi) : track.slice(0,pi+1)).forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); gctx.shadowBlur=0; }
   // start / finish
-  const s=toGame(track[0]), f=toGame(track[track.length-1]);
-  gctx.fillStyle="#2E9E6B"; gctx.beginPath(); gctx.arc(...s,10,0,7); gctx.fill();
-  // finish: chequered ring + label
-  gctx.fillStyle = finished ? "#2E9E6B" : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=4;
-  gctx.beginPath(); gctx.arc(...f,17,0,7); gctx.fill(); gctx.stroke();
-  for(let k=0;k<4;k++){ gctx.fillStyle = k%2? "#1C2B4D":"#FBF1E1"; gctx.beginPath(); gctx.moveTo(...f); gctx.arc(...f,10,k*Math.PI/2,(k+1)*Math.PI/2); gctx.fill(); }
-  gctx.fillStyle="#1C2B4D"; gctx.font="bold 13px system-ui"; gctx.textAlign="center"; gctx.fillText("ФИНИШ", f[0], f[1]+33);
+  { const rail=$("playMode").value==="rail", L1=track.length-1, nL=LAPS_BY_RANK[curRank()];
+    const open = Math.hypot(track[0][0]-track[L1][0], track[0][1]-track[L1][1]) > 0.2;
+    const lap = playing ? (RAIL.lap||0) : 0, last = !rail || lap>=nL-1 || finished;
+    const fromI = rail && open && lap%2===1 ? L1 : 0, toI = fromI===0 ? L1 : 0;
+    const a=toGame(track[fromI]), b=toGame(track[toI]);
+    const label=(q,txt)=>{ gctx.font="900 13px system-ui"; gctx.textAlign="center"; gctx.lineJoin="round"; gctx.lineWidth=4; gctx.strokeStyle="#FBF1E1"; gctx.strokeText(txt,q[0],q[1]+33); gctx.fillStyle="#1C2B4D"; gctx.fillText(txt,q[0],q[1]+33); };
+    // where this lap starts
+    gctx.fillStyle="#2E9E6B"; gctx.beginPath(); gctx.arc(...a,10,0,7); gctx.fill();
+    if(!playing && !finished) label(a,"СТАРТ");
+    // where this lap ends
+    if(last){ gctx.fillStyle = finished ? "#2E9E6B" : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=4;
+      gctx.beginPath(); gctx.arc(...b,17,0,7); gctx.fill(); gctx.stroke();
+      for(let k=0;k<4;k++){ gctx.fillStyle = k%2? "#1C2B4D":"#FBF1E1"; gctx.beginPath(); gctx.moveTo(...b); gctx.arc(...b,10,k*Math.PI/2,(k+1)*Math.PI/2); gctx.fill(); }
+      label(b, playing||finished ? "ФИНИШ" : `ФИНИШ · после ${nL} кругов`); }
+    else { gctx.fillStyle="#F2B632"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=4; gctx.beginPath(); gctx.arc(...b,17,0,7); gctx.fill(); gctx.stroke();
+      gctx.fillStyle="#1C2B4D"; gctx.font="900 18px system-ui"; gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.fillText(open?"↩":"↻",b[0],b[1]+1); gctx.textBaseline="alphabetic";
+      label(b, !playing ? (open ? "РАЗВОРОТ" : `КРУГ · всего ${nL}`) : open ? `РАЗВОРОТ · круг ${lap+2}/${nL}` : `КРУГ ${lap+2}/${nL}`); } }
   // target (gold ring a little ahead of progress)
   for(let k=1;k<cps.length;k++){ const q=toGame(track[cpAt(k)]); const done=k<=cpIdx;
     const gk = done && JUDG.lap===RAIL.lap && JUDG.seg[k]; gctx.fillStyle = done ? (gk? gk.c : "#C2306F") : "#FBF1E1"; gctx.strokeStyle="#1C2B4D"; gctx.lineWidth=3;
@@ -546,12 +556,12 @@ function stepRail(now){
   const rank = TRACK_RANK[$("trackSel").value] ?? 0;
   const LAPS = [5,5,6,6,7,8][rank], cosMin = [0.15,0.35,0.45,0.55,0.6,0.65][rank];
   if(armed && !playing){
-    const left = 1.5 - (now-armedAt)/1000;                           // fixed countdown, no "hold still" wait
+    const left = 3 - (now-armedAt)/1000;                             // 3-2-1, then the start waits for YOUR first move
     RAIL.count = Math.max(0,left); cursor = trackAt(0);
     if(left>0){ RAIL.waiting=true; return; }
-    if(window.FX) FX.start(rank); RAIL.waiting=false; playing=true; armed=false;
+    RAIL.waiting=false; playing=true; armed=false;
     const L1_=track.length-1; RAIL.open = Math.hypot(track[0][0]-track[L1_][0], track[0][1]-track[L1_][1]) > 0.2;
-    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:now, lap0T:0}); Object.assign(RAIL,{segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
+    Object.assign(TEMPO,{v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:now, lap0T:0}); Object.assign(RAIL,{go:false, goT:0, segTk:0, segTn:0, s:0, u:0, lap:0, cs:0, prev:null, prevT:0, vel:[0,0], moveT:0, okT:0, qSum:0, qW:0, segQ:0, segW:0, segTurnT:0, segTurnL:0, lastHead:null, curls:0});
     cpIdx=0;
   }
   const rev = () => RAIL.open && (RAIL.lap||0)%2===1;
@@ -571,6 +581,10 @@ function stepRail(now){
   const qf = Math.max(0, Math.min(1, (cos-(cosMin-0.3))/(1-(cosMin-0.3))));   // 0..1 direction quality
   RAIL.moving = !!tip && speed > 0.25;
   RAIL.ok = RAIL.moving && qf > 0.5;
+  if(playing && !finished && !RAIL.go){
+    RAIL.goT = (RAIL.moving && qf>0.5) ? RAIL.goT+dt : Math.max(0,RAIL.goT-dt*0.5);
+    if(RAIL.goT>0.25){ RAIL.go=true; TEMPO.lapT0=now; RAIL.last=now; if(window.FX) FX.start(rank); }
+    RAIL.s=posOf(0); cursor=trackAt(RAIL.s); rawGame=null; offLine=false; return; }
   if(playing && !finished){
     TEMPO.v += ((RAIL.moving?speed:0)-TEMPO.v)*(1-Math.exp(-dt/0.35));
     if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt;
@@ -622,6 +636,7 @@ function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(n
   const sp=Math.min(3,Math.hypot(RAIL.vel[0],RAIL.vel[1])); const t=RAIL.dir||[1,0]; const q = sp>1e-6 ? (RAIL.vel[0]*t[0]+RAIL.vel[1]*t[1])/sp : 0;
   LH.sp+=(sp-LH.sp)*a; LH.mv+=((RAIL.moving?1:0)-LH.mv)*a; if(RAIL.moving) LH.q+=(q-LH.q)*a;
   if(!playing) return tip ? "Веди язык по стрелке" : "Покажи кончик языка";
+  if(!RAIL.go) return tip ? "Старт за тобой — поведи язык по стрелке" : "Покажи кончик языка";
   const task=lapTask(), v=TEMPO.v/TEMPO.pace, ok=task!==TASKS.norm ? taskOkNow(task) : 1;
   let h = !tip ? "Покажи кончик языка — я тебя потерял"
     : LH.mv<0.35 ? "Не замирай — веди дальше, сад ждёт"
@@ -631,7 +646,7 @@ function liveHint(){ const now=performance.now(); const dt=LH.t? Math.min(0.1,(n
     : LH.q<0.55 ? "Ближе к линии: смотри, куда показывает стрелка"
     : LH.sp<0.6 ? "Смелее — чуть шире и увереннее"
     : "Отлично, ровный ритм — так держать";
-  if(h!==LH.cur && now-LH.at>900){ LH.cur=h; LH.at=now; }
+  if(h!==LH.cur && now-LH.at>2500){ LH.cur=h; LH.at=now; }
   return LH.cur; }
 function drawFinish(){
   if(!finished) return;
@@ -640,7 +655,7 @@ function drawFinish(){
   gctx.textAlign="center"; gctx.fillStyle="#F2B632"; gctx.font=`900 ${Math.round(40+20*t)}px system-ui`;
   const m=$("score").textContent.match(/★+☆*/); gctx.fillText(m?m[0]:"★", W/2, W/2-10);
   gctx.fillStyle="#FBF1E1"; gctx.font="900 34px system-ui"; gctx.fillText("ФИНИШ!", W/2, W/2+40);
-  gctx.font="16px system-ui"; gctx.fillText("Нажми «Старт трассы», чтобы ещё раз", W/2, W/2+72);
+  gctx.font="16px system-ui"; gctx.fillText(`Все ${LAPS_BY_RANK[curRank()]} кругов пройдены`, W/2, W/2+72);
 }
 function setBar(band,needle,lo,hi,val,ok){ band.style.left=(lo*100)+'%'; band.style.width=Math.max(3,(hi-lo)*100)+'%'; band.className=ok?'ok':'';
   needle.style.display = val==null ? 'none' : ''; if(val!=null) needle.style.left=(Math.max(0,Math.min(1,val))*100)+'%'; }
@@ -666,6 +681,10 @@ function drawRailHints(){
   if(armed && RAIL.count>0){ const W=game.width; gctx.fillStyle='rgba(28,43,77,.55)'; gctx.fillRect(0,0,W,W); gctx.fillStyle='#F2B632'; gctx.textAlign='center'; gctx.textBaseline='middle'; gctx.font='900 120px system-ui'; gctx.fillText(String(Math.ceil(RAIL.count)), W/2, W/2); gctx.textBaseline='alphabetic'; return; }
   if($("playMode").value!=="rail" || !cursor) return;
   const c=toGame(cursor), d=RAIL.dir, L=46;
+  if(playing && !RAIL.go){ const W=game.width, pulse=0.5+0.5*Math.sin(performance.now()/180);
+    gctx.strokeStyle=`rgba(242,182,50,${0.5+0.5*pulse})`; gctx.lineWidth=5; gctx.beginPath(); gctx.arc(...c,26+8*pulse,0,7); gctx.stroke();
+    gctx.font='900 22px system-ui'; gctx.textAlign='center'; gctx.lineJoin='round'; gctx.lineWidth=6; gctx.strokeStyle='#FBF1E1';
+    const ty = c[1] < W*0.5 ? c[1]+70 : c[1]-56; gctx.strokeText('ПОЕХАЛИ? Веди по стрелке', W/2, ty); gctx.fillStyle='#C2306F'; gctx.fillText('ПОЕХАЛИ? Веди по стрелке', W/2, ty); }
   // big arrow: which way to move the tongue now
   gctx.save(); gctx.translate(c[0],c[1]); gctx.rotate(Math.atan2(d[1],d[0]));
   gctx.fillStyle = RAIL.ok ? "rgba(46,158,107,.9)" : (RAIL.moving ? "rgba(194,48,111,.85)" : "rgba(242,182,50,.95)");
@@ -708,12 +727,13 @@ const JUDG={seg:[], lap:-1, pops:[], n:0, last:null};
 function gradeOf(q){ return GRADE.find(g=>q>=g.min); }
 function judgeSeg(k,q,curl,pos,sub){ const g=gradeOf(q); if(JUDG.lap!==RAIL.lap){ JUDG.lap=RAIL.lap; JUDG.seg=[]; }
   JUDG.seg[k]=g; JUDG.n++; JUDG.last={k,q:Math.round(q*100)/100,g:g.t,curl:!!curl,task:sub&&sub.t,n:JUDG.n};
-  JUDG.pops.push({t:curl? "ЗАВИТОК!" : g.t, c:curl? "#2BB3A3" : g.c, x:pos[0], y:pos[1], t0:performance.now(), big:curl||g===GRADE[0], sub});
-  if(JUDG.pops.length>6) JUDG.pops.shift(); }
+  // words only for what matters (curl > ТОЧНО > МИМО), one at a time, ≥1.6 s apart; ХОРОШО / ПОЧТИ and task results live in the colour of the line and the panel
+  const now=performance.now(), word = curl ? "ЗАВИТОК!" : g===GRADE[0] ? "ТОЧНО!" : g===GRADE[3] ? "МИМО" : null;
+  if(word && now-(JUDG.popAt||0)>1600 && !(window.FX && FX.busy && FX.busy())){ JUDG.popAt=now; JUDG.pops=[{t:word, c:curl? "#2BB3A3" : g.c, x:pos[0], y:pos[1], t0:now, big:true}]; } }
 function segPts(a,b){ const lo=Math.min(a,b), hi=Math.max(a,b); return track.slice(lo,hi+1); }
 function strokePts(pts,col,w){ if(pts.length<2) return; gctx.strokeStyle=col; gctx.lineWidth=w; gctx.beginPath(); pts.forEach((p,i)=>{ const q=toGame(p); i?gctx.lineTo(...q):gctx.moveTo(...q); }); gctx.stroke(); }
-function drawJudg(){ const now=performance.now(); JUDG.pops=JUDG.pops.filter(p=>now-p.t0<750);
-  for(const p of JUDG.pops){ const a=(now-p.t0)/750, k=a<0.15? 0.6+a/0.15*0.55 : 1.15-Math.min(0.15,(a-0.15)); const y=p.y-28-a*34;
+function drawJudg(){ const now=performance.now(); JUDG.pops=JUDG.pops.filter(p=>now-p.t0<1000);
+  for(const p of JUDG.pops){ const a=(now-p.t0)/1000, k=a<0.15? 0.6+a/0.15*0.55 : 1.15-Math.min(0.15,(a-0.15)); const y=p.y-28-a*34;
     gctx.font=`900 ${p.big?28:22}px system-ui`; const hw=gctx.measureText(p.t).width*k/2+10;
     gctx.save(); gctx.globalAlpha= a>0.7 ? 1-(a-0.7)/0.3 : 1; gctx.translate(Math.max(hw,Math.min(game.width-hw,p.x)), Math.max(24,y)); gctx.scale(k,k); gctx.textAlign="center"; gctx.textBaseline="middle"; gctx.lineJoin="round";
     gctx.lineWidth=7; gctx.strokeStyle="#1C2B4D"; gctx.strokeText(p.t,0,0); gctx.fillStyle=p.c; gctx.fillText(p.t,0,0);
@@ -940,7 +960,7 @@ function recordFrame(now){
   const r3 = v => v==null ? null : Math.round(v*1000)/1000;
   rec.frames.push({ t, face: !!lastLm, raw: tipRaw && !lostFor ? tipRaw.map(r3) : null, tip: tip ? tip.map(r3) : null,
     cur: cursor ? cursor.map(r3) : null, area: r3(tongueArea), lost: Math.round(lostFor), off: offLine,
-    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, gap: pacerGap()==null? null : Math.round(pacerGap()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
+    prog: Math.round(progress*10)/10, lap: RAIL.lap||0, spd: Math.round((RAIL.cs||0)*100)/100, ok: !!RAIL.ok, mv: !!RAIL.moving, curls: RAIL.curls||0, tech: RAIL.qW? Math.round(100*RAIL.qSum/RAIL.qW):0, hint: playing? LH.cur : '', go: !!RAIL.go, tempo: Math.round(TEMPO.v/TEMPO.pace*100)/100, gap: pacerGap()==null? null : Math.round(pacerGap()*100)/100, pace: Math.round(TEMPO.pace*100)/100, task: (playing? (LAP_PLAN[curRank()][Math.min(LAP_PLAN[curRank()].length-1,RAIL.lap||0)]) : ''), shapeR: SHAPE.r==null? null : Math.round(SHAPE.r*100)/100, judge: JUDG.last && JUDG.last.n!==rec.jn ? (rec.jn=JUDG.last.n, JUDG.last) : null, play: playing, drift: drift.map(r3) });
   // a camera+mask snapshot (around the mouth) and the game field every 250 ms
   if(now - rec.lastShot > 400 && rec.shots.length < 150){
     rec.lastShot = now;
@@ -1203,6 +1223,7 @@ const FX = (() => {
     sticker={text:d[0],bg:d[1],ink:d[2],t0:now,pos:pos||null,rot:(Math.random()*10-5)*Math.PI/180};
     if(sound && d[3]) play(d[3],{gain:.9,when:.05}); if(musicSrc && bad) duck(0.15,600); return true; }
   return {
+    busy(){ return !!sticker && performance.now()-sticker.t0<1400; },
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
     lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`+(task&&task.t? ` · ${task.icon} ${task.t}` : ''); showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
@@ -1210,10 +1231,9 @@ const FX = (() => {
       if(q>=0.4 && q<0.65){ play('hit_tochno',{rate:0.84,gain:.45}); vib([15]); return; }   // ПОЧТИ: soft tick, combo kept
       if(q>=0.65){ misses=0; combo++; play('hit_tochno',{rate:Math.pow(2,Math.min(combo-1,12)/12)}); vib(q>0.85?V.perfect:V.hit);
         if(q>0.85) play('slurp',{gain:.45,when:.02});
-        if(combo===3){ play('combo_3',{when:.12}); vib(V.combo3); showSticker('combo3',pos,{sound:false}); }
-        else if(combo===5){ vib(V.combo5); if(!showSticker('combo5',pos)) play('combo_5',{when:.12}); }
+        if(combo===3){ play('combo_3',{when:.12}); vib(V.combo3); }
+        else if(combo===5){ vib(V.combo5); play('combo_5',{when:.12}); }
         else if(combo===10||(combo>10&&combo%10===0)){ play('combo_10',{when:.12}); vib(V.combo10); showSticker('combo10',pos,{sound:false}); }
-        else if(combo===7){ showSticker('sniper',pos); }
       } else { combo=0; misses++; play('miss_bwop',{gain:.8}); vib(V.miss);
         if(misses>=3){ misses=0; play('angry_steam',{gain:.7,when:.1}); showSticker('rest',pos,{bad:true}); } }
     },
