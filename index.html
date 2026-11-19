@@ -147,6 +147,7 @@
     <div class="row">
       <label>Режим <select id="playMode" autocomplete="off"><option value="rail" selected>Рельсы — трасса ведёт</option><option value="free">Свободный (отладка)</option></select></label>
       <label><input type="checkbox" id="autoRange" checked> автоподстройка размаха</label>
+      <label><input type="checkbox" id="voiceOn" checked> голос подсказок</label> <span id="voiceName" class="hint"></span>
       <label>Магнит к линии <input type="range" id="magnet" min="0" max="0.9" step="0.05" value="0.55"></label>
       <label><input type="checkbox" id="autoCenter" checked> автоцентровка</label>
       <label>Размах <input type="range" id="gain" min="0.6" max="3" step="0.1" value="1.6"></label>
@@ -415,7 +416,7 @@ $("tcGo").onclick = () => { if(!running){ $("startBtn").scrollIntoView({block:"c
 let anchor=null;
 function resetRun(){ JUDG.seg=[]; JUDG.lap=-1; JUDG.pops=[]; RAIL.s=0; RAIL.last=0; RAIL.prev=null; anchor=null; cpIdx=0; hits=0; progress=0; onLine=0; total=0; finished=false; playing=false; armed=false; drift=[0,0]; $("score").textContent=""; }
 // "Старт": run arms; it begins when the cursor reaches the start dot
-$("playBtn").onclick = () => { if(armed || !running) return; hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=3; $("score").textContent="Приготовься… язык в удобное положение"; };
+$("playBtn").onclick = () => { if(armed || !running) return; voiceUnlock(); hideTipCard(); resetRun(); armed=true; armedAt=performance.now(); RAIL.count=3; $("score").textContent="Приготовься… язык в удобное положение"; };
 
 // ---------- personal range calibration: tongue circle → maps your reach onto the field ----------
 let range = { cx:0, cy:0, rx:0.9, ry:0.9 };   // defaults: the mouth opening fills the field
@@ -584,14 +585,14 @@ function stepRail(now){
   RAIL.ok = RAIL.moving && qf > 0.5;
   if(playing && !finished && !RAIL.go){
     RAIL.goT = (RAIL.moving && qf>0.5) ? RAIL.goT+dt : Math.max(0,RAIL.goT-dt*0.5);
-    if(RAIL.goT>0.25){ RAIL.go=true; TEMPO.lapT0=now; RAIL.last=now; if(window.FX) FX.start(rank); }
+    if(RAIL.goT>0.25){ RAIL.go=true; TEMPO.lapT0=now; RAIL.last=now; if(window.FX) FX.start(rank); say('поехали',{force:true}); }
     RAIL.s=posOf(0); cursor=trackAt(RAIL.s); rawGame=null; offLine=false; return; }
   if(playing && !finished){
     TEMPO.v += ((RAIL.moving?speed:0)-TEMPO.v)*(1-Math.exp(-dt/0.35));
     if(RAIL.moving){ const w=speed*dt; RAIL.moveT+=dt; if(RAIL.ok) RAIL.okT+=dt;
       if((RAIL.lap||0)===0){ TEMPO.pS+=speed*dt; TEMPO.pN+=dt; }
       const task=lapTask(); let tk=1;
-      if(task!==TASKS.norm){ const o=taskOkNow(task); if(o!==null){ tk=o; RAIL.segTk+=o*dt; RAIL.segTn+=dt;
+      if(task!==TASKS.norm){ const o=taskOkNow(task); shapeVoice(task,o,dt); if(o!==null){ tk=o; RAIL.segTk+=o*dt; RAIL.segTn+=dt;
           if(task.shape){ TEMPO.shOkT+=o*dt; TEMPO.shAllT+=dt; } else { TEMPO.okT+=o*dt; TEMPO.allT+=dt; } } }
       const qq = qf*(0.45+0.55*tk);
       RAIL.qSum+=qq*w; RAIL.qW+=w; RAIL.segQ+=qf*w; RAIL.segW+=w;
@@ -626,7 +627,7 @@ function stepRail(now){
     const tech = Math.round(100*RAIL.qSum/Math.max(1e-6,RAIL.qW));
     $("score").textContent = `круг ${Math.min(LAPS,RAIL.lap+1)}/${LAPS} · техника ${tech}% · завитки ${RAIL.curls}`;
     if(RAIL.lap>=LAPS){ finished=true; playing=false; finishAt=now;
-      const st = rank===0 ? [55,35] : [75,55]; const stars = tech>=st[0]?3:tech>=st[1]?2:1; if(window.FX) FX.finish(stars); setTimeout(()=>showTipCard('post',{tech,curls:RAIL.curls,stars}),1600);
+      const st = rank===0 ? [55,35] : [75,55]; const stars = tech>=st[0]?3:tech>=st[1]?2:1; if(window.FX) FX.finish(stars); setTimeout(()=>say(stars===3?'восхитительно':stars===2?'хорошо… очень хорошо':'неплохо… ещё разок?',{force:true}),700); setTimeout(()=>showTipCard('post',{tech,curls:RAIL.curls,stars}),1600);
       $("score").textContent = `ФИНИШ · ${"★".repeat(stars)}${"☆".repeat(3-stars)} · техника ${tech}% · завитки ${RAIL.curls}`; }
   }
   cursor = trackAt(RAIL.s); rawGame = null; offLine = false;
@@ -703,10 +704,10 @@ const CP_N = 10; let cps=[], cpIdx=0, cpFlash=0;
 // tempo is measured against YOUR own pace from the first lap, so "slow" and "fast" mean slower/faster than you usually go
 const TASKS={
   norm:{name:"обычный", icon:"", band:[0.55,1.6]},
-  slow:{name:"медленно, точка ведёт", icon:"🐢", pace:0.6, col:"#2F6FB8", sub:"притормози язык — веди вместе с точкой", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
-  fast:{name:"быстро, точка ведёт", icon:"⚡", pace:1.5, col:"#E0662A", sub:"ускорь язык — не отставай от точки", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
-  soft:{name:"мягкий язык", icon:"🍦", col:"#2BB3A3", sub:"мягкий широкий язык, как для мороженого", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
-  hard:{name:"острый язык", icon:"🎯", col:"#C2306F", sub:"узкий напряжённый язык, работает кончик", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
+  slow:{name:"медленно, точка ведёт", icon:"🐢", pace:0.6, say:"медленно…", col:"#2F6FB8", sub:"притормози язык — веди вместе с точкой", t:"МЕДЛЕННО", band:[0.15,0.8], hint:"Медленнее — тяни каждый мазок", fix:"МЕДЛЕННЕЕ!", good:"✓ темп"},
+  fast:{name:"быстро, точка ведёт", icon:"⚡", pace:1.5, say:"быстрее!", col:"#E0662A", sub:"ускорь язык — не отставай от точки", t:"БЫСТРЕЕ", band:[1.25,4], hint:"Быстрее — живой, бодрый ритм", fix:"БЫСТРЕЕ!", good:"✓ темп"},
+  soft:{name:"мягкий язык", icon:"🍦", say:"расслабь язык", col:"#2BB3A3", sub:"мягкий широкий язык, как для мороженого", t:"РАССЛАБЬ ЯЗЫК", band:[0.4,1.7], shape:"wide", hint:"Расслабь язык — мягкий и широкий, как для мороженого", fix:"ШИРЕ, МЯГЧЕ!", good:"✓ мягко"},
+  hard:{name:"острый язык", icon:"🎯", say:"напряги язык", col:"#C2306F", sub:"узкий напряжённый язык, работает кончик", t:"НАПРЯГИ ЯЗЫК", band:[0.4,2.2], shape:"narrow", hint:"Напряги язык — узкий, острый кончик", fix:"УЖЕ, ОСТРЕЕ!", good:"✓ остро"}};
 const LAP_PLAN=[["norm","norm","slow","norm","fast"],["norm","slow","norm","fast","norm"],["norm","slow","fast","soft","norm","norm"],
   ["norm","slow","soft","fast","hard","norm"],["norm","soft","slow","hard","fast","soft","norm"],["norm","slow","hard","fast","soft","slow","hard","fast"]];
 const TEMPO={v:0, pace:1.3, pS:0, pN:0, okT:0, allT:0, shOkT:0, shAllT:0, lapT0:0, lap0T:0};
@@ -716,8 +717,19 @@ function leadSpeed(){ const task=lapTask(), cum=trackCum(); return cum[cum.lengt
 function leadRatio(){ if(!leadOn()) return null; return (TEMPO.v/TEMPO.pace)/lapTask().pace; }  // your tongue speed (vs your own lap-1 speed) ÷ what the dot asks: 1 = in rhythm
 function pacerU(){ return null; }
 function pacerGap(){ return null; }
+// ---------- voice coach: short words in a female Russian voice (system speech; for release — record a voice actress) ----------
+const VOICE={v:null, last:0, lastTxt:'', unlocked:false};
+function pickVoice(){ if(!window.speechSynthesis) return null; const vs=speechSynthesis.getVoices().filter(v=>/^ru/i.test(v.lang)); if(!vs.length) return null;
+  const fem=/milena|katya|katia|alena|alyona|anna|irina|elena|svetlana|daria|dariya|tatyana|marina|female|жен/i, male=/yuri|maxim|pavel|dmitr|male/i;
+  return vs.find(v=>fem.test(v.name)&&/enhanced|premium|улучш/i.test(v.name)) || vs.find(v=>fem.test(v.name)) || vs.find(v=>!male.test(v.name)) || vs[0]; }
+if(window.speechSynthesis){ const f=()=>{ VOICE.v=pickVoice(); const n=$("voiceName"); if(n) n.textContent = VOICE.v ? `(${VOICE.v.name})` : '(нет русского голоса)'; }; f(); speechSynthesis.onvoiceschanged=f; }
+function voiceUnlock(){ if(!window.speechSynthesis || VOICE.unlocked) return; const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); VOICE.unlocked=true; }
+function say(txt,{force=false,gap=2200}={}){ if(!window.speechSynthesis || !$("voiceOn").checked) return; const now=performance.now();
+  if(!force && (now-VOICE.last<gap || (txt===VOICE.lastTxt && now-VOICE.last<4500))) return;
+  if(!VOICE.v) VOICE.v=pickVoice(); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(txt); u.lang='ru-RU'; if(VOICE.v) u.voice=VOICE.v;
+  u.rate=0.92; u.pitch=1.12; u.volume=1; speechSynthesis.speak(u); VOICE.last=now; VOICE.lastTxt=txt; if(window.FX && FX.duckFor) FX.duckFor(900); }
 const BANNER={t0:0, task:null};
-function lapBanner(task){ BANNER.t0=performance.now(); BANNER.task=task; }
+function lapBanner(task){ BANNER.t0=performance.now(); BANNER.task=task; say(task.say||task.t.toLowerCase(),{force:true}); }
 function drawBanner(){ const task=BANNER.task, a=(performance.now()-BANNER.t0)/1800; if(!task||a>1) return; const W=game.width;
   const al = a<0.1 ? a/0.1 : a>0.8 ? (1-a)/0.2 : 1; gctx.save(); gctx.globalAlpha=al;
   gctx.fillStyle="rgba(28,43,77,.72)"; gctx.fillRect(0,W*0.3,W,W*0.4);
@@ -729,7 +741,8 @@ function drawBanner(){ const task=BANNER.task, a=(performance.now()-BANNER.t0)/1
 const CUE={st:'ok', at:0};
 function drawDotCue(c){ if(!leadOn() || RAIL.now-TEMPO.lapT0<800) return; const r=leadRatio(), now=performance.now();
   let st = !RAIL.moving ? 'go' : r>1.45 ? 'slow' : r<0.7 ? 'fast' : (r>0.8 && r<1.3) ? 'ok' : CUE.st;
-  if(st!==CUE.st && now-CUE.at>500){ CUE.st=st; CUE.at=now; }
+  if(st!==CUE.st && now-CUE.at>500){ const prev=CUE.st; CUE.st=st; CUE.at=now;
+    if(st==='slow') say('медленнее'); else if(st==='fast') say('быстрее'); else if(st==='ok' && (prev==='slow'||prev==='fast')) say('да… вот так'); else if(st==='go') say('веди за точкой'); }
   const L={ok:["✓ В РИТМЕ","#2E9E6B"], slow:["🐢 МЕДЛЕННЕЕ","#2F6FB8"], fast:["⚡ БЫСТРЕЕ","#E0662A"], go:["ВЕДИ ЗА ТОЧКОЙ","#C2306F"]}[CUE.st];
   const W=game.width, y = c[1] > W-90 ? c[1]-58 : c[1]+58, pulse = CUE.st==='ok' ? 1 : 1+0.07*Math.sin(now/90);
   gctx.save(); gctx.translate(Math.max(95,Math.min(W-95,c[0])), y); gctx.scale(pulse,pulse);
@@ -739,6 +752,8 @@ function drawDotCue(c){ if(!leadOn() || RAIL.now-TEMPO.lapT0<800) return; const 
 function nextTask(){ const plan=LAP_PLAN[curRank()], k=(RAIL.lap||0)+1; return k<plan.length ? TASKS[plan[k]] : null; }
 function curRank(){ return TRACK_RANK[$("trackSel").value] ?? 0; }
 function lapTask(){ const plan=LAP_PLAN[curRank()]; return TASKS[plan[Math.min(plan.length-1, RAIL.lap||0)]]; }
+const SHV={bad:0,t:0};
+function shapeVoice(task,o,dt){ if(!task.shape || o==null) return; SHV.bad = o===0 ? SHV.bad+dt : 0; if(SHV.bad>1.2){ SHV.bad=-2; say(task.shape==='wide' ? 'мягче… шире' : 'острее… кончиком'); } }
 function taskOkNow(task){   // 1 = doing it, 0 = not, null = can't tell (shape not visible / first 0.8 s of the lap to switch)
   if(RAIL.now - TEMPO.lapT0 < 800) return null;
   if(task.pace && leadOn()){ const r=leadRatio(); return (r>0.7 && r<1.45 && (RAIL.qfS||0)>0.45) ? 1 : 0; }
@@ -1250,6 +1265,7 @@ const FX = (() => {
   return {
     busy(){ return !!sticker && performance.now()-sticker.t0<1400; },
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
+    duckFor(ms){ duck(0.12,ms); },
     tempo(r){ if(musicSrc&&ctx){ musicSrc.playbackRate.setTargetAtTime(r<1?0.82:r>1?1.18:1, ctx.currentTime, 0.25); } },
     lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; if(!task||!task.t) showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
@@ -1285,6 +1301,7 @@ const FX = (() => {
       g.fillStyle=sticker.ink; g.textAlign='center'; g.textBaseline='middle'; g.fillText(sticker.text,0,1); g.restore(); }
   };
 })();
+window.FX = FX;   // the game module checks window.FX — without this line no sound, sticker, music or vibration ever ran
 </script>
 </body>
 </html>
