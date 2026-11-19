@@ -1260,6 +1260,8 @@ drawGame();
 </script>
 <script>
 // ---------- sound, vibration, stickers, music (game feel) ----------
+// recorded phrases as uploaded to the repo (ElevenLabs file names, in the order they were generated)
+const VOF={warm:'ElevenLabs_2026-11-19T15_26_29__s50_sim75_v4',slowlap:'ElevenLabs_2026-11-19T15_26_51__s50_sim75_v4',faster:'ElevenLabs_2026-11-19T15_26_59__s50_sim75_v4',slower:'ElevenLabs_2026-11-19T15_27_06__s50_sim75_v4',follow:'ElevenLabs_2026-11-19T15_27_12__s50_sim75_v4',good:'ElevenLabs_2026-11-19T15_27_33__s50_sim75_v4',soft:'ElevenLabs_2026-11-19T15_27_40__s50_sim75_v4',hard:'ElevenLabs_2026-11-19T15_27_47__s50_sim75_v4',softer:'ElevenLabs_2026-11-19T15_27_54__s50_sim75_v4',sharper:'ElevenLabs_2026-11-19T15_28_01__s50_sim75_v4',calwide:'ElevenLabs_2026-11-19T15_28_23__s50_sim75_v4',calnarrow:'ElevenLabs_2026-11-19T15_28_30__s50_sim75_v4',fin3:'ElevenLabs_2026-11-19T15_28_37__s50_sim75_v4',fin2:'ElevenLabs_2026-11-19T15_28_44__s50_sim75_v4',fin1:'ElevenLabs_2026-11-19T15_28_50__s50_sim75_v4'};
 const FX = (() => {
   let ctx=null, master=null, musicGain=null, musicSrc=null; const buf={}, loading={};
   let combo=0, misses=0, lostSince=0, lostShown=false, sawTip=false, lastStk=0, lastBadStk=0, rank=0;
@@ -1299,10 +1301,10 @@ const FX = (() => {
     busy(){ return !!sticker && performance.now()-sticker.t0<1400; },
     start(r){ rank=r; combo=0; misses=0; lostShown=false; sticker=null; unlock(); play('countdown_go'); vib(V.start); startMusic(); wakeOn(); },
     duckFor(ms){ duck(0.12,ms); },
-    voice(k){ const c=ac(); if(!c) return Promise.resolve(false); let cur=null;
-      return load('vo_'+k).then(b=>{ if(!b) return false; try{ if(FX.__vo) FX.__vo.stop(); }catch(e){}
+    voice(k){ const c=ac(); if(!c) return Promise.resolve(false);
+      return load(VOF[k]||('vo_'+k)).then(b=>{ if(!b) return false; try{ if(FX.__vo) FX.__vo.stop(); }catch(e){}
         const s=c.createBufferSource(); s.buffer=b; const g=c.createGain(); g.gain.value=1.25; s.connect(g).connect(master); s.start(); FX.__vo=s; duck(0.12, Math.round(b.duration*1000)+300); return true; }); },
-    preloadVoice(){ ['warm','slowlap','faster','slower','follow','good','soft','hard','softer','sharper','calwide','calnarrow','fin3','fin2','fin1'].forEach(k=>load('vo_'+k)); },
+    preloadVoice(){ ['warm','slowlap','faster','slower','follow','good','soft','hard','softer','sharper','calwide','calnarrow','fin3','fin2','fin1'].forEach(k=>load(VOF[k]||('vo_'+k))); },
     tempo(r){ if(musicSrc&&ctx){ musicSrc.playbackRate.setTargetAtTime(r<1?0.82:r>1?1.18:1, ctx.currentTime, 0.25); } },
     lap(k,n,task){ lastStk=0; STK.lap[0]=`КРУГ ${k}/${n}`; if(!task||!task.t) showSticker('lap',null,{sound:false}); play('coin',{gain:.5}); vib([25]); },
     checkpoint(q,idx,pos,curl){
